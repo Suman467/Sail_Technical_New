@@ -1,0 +1,30 @@
+{
+  "name": "sail_technical",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "node ./scripts/run-playwright.cjs",
+    "test:smoke": "node ./scripts/run-playwright.cjs --grep @smoke",
+    "test:login": "node ./scripts/run-playwright.cjs --grep @login",
+    "report:summary": "start reports/validation",
+    "report:detailed": "playwright show-report reports/validation/playwright-html",
+    "report:package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-playwright-report.ps1",
+    "typecheck": "tsc --noEmit",
+    "lint": "node ./node_modules/eslint/bin/eslint.js ."
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.2",
+    "@typescript-eslint/eslint-plugin": "^8.70.0",
+    "@typescript-eslint/parser": "^8.70.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.1",
+    "xlsx": "^0.18.5"
+  }
+}

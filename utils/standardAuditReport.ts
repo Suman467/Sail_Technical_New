@@ -1,0 +1,34 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+export type AuditIdentifiers = Record<string, string>;
+export type AuditIssue = { identifiers: AuditIdentifiers; issue: string };
+export type AuditMismatch = { identifiers: AuditIdentifiers; field: string; expected: string; actual: string; reason: string };
+export type AuditAutomationIssue = { identifiers: AuditIdentifiers; failedStep: string; expected: string; actual: string; reason: string; evidence?: { name: string; contentType: string; body: string } };
+export type StandardAuditData = { dataType: string; fileName: string; vessel: string; excelFile: string; uploadedBy: string; validationType: string; successfullyImported: number; recordsSelected?: number; recordsAttempted?: number; recordsChecked: number; recordsMatched: number; missingRecords: AuditIssue[]; fieldMismatches: AuditMismatch[]; automationIssues?: AuditAutomationIssue[]; identifierColumns: string[]; additionalMetadata?: Record<string, string> };
+
+const escapeHtml = (value: unknown) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+export function generateStandardAuditReport(data: StandardAuditData): string {
+  const directory = path.resolve(process.cwd(), 'reports', 'audit');
+  fs.mkdirSync(directory, { recursive: true });
+  const reportPath = path.join(directory, data.fileName);
+  const automation = data.automationIssues ?? [];
+  const key = (ids: AuditIdentifiers) => data.identifierColumns.map((column) => ids[column] ?? '').join('\n');
+  const issueCount = new Set([...data.missingRecords.map((item) => key(item.identifiers)), ...data.fieldMismatches.map((item) => key(item.identifiers)), ...automation.map((item) => key(item.identifiers))]).size;
+  const auditPassed = automation.length === 0;
+  const validationStatus = !auditPassed ? 'INCOMPLETE' : issueCount ? 'COMPLETED WITH ISSUES' : 'PASSED';
+  const headers = data.identifierColumns.map((column) => `<th>${escapeHtml(column)}</th>`).join('');
+  const cells = (ids: AuditIdentifiers) => data.identifierColumns.map((column) => `<td>${escapeHtml(ids[column] ?? '')}</td>`).join('');
+  const missingRows = data.missingRecords.map((item, index) => `<tr><td>${index + 1}</td>${cells(item.identifiers)}<td>${escapeHtml(item.issue)}</td></tr>`).join('');
+  const mismatchRows = data.fieldMismatches.map((item, index) => `<tr><td>${index + 1}</td>${cells(item.identifiers)}<td>${escapeHtml(item.field)}</td><td>${escapeHtml(item.expected)}</td><td>${escapeHtml(item.actual)}</td><td>${escapeHtml(item.reason)}</td></tr>`).join('');
+  const automationRows = automation.map((item, index) => `<tr><td>${index + 1}</td>${cells(item.identifiers)}<td>${escapeHtml(item.failedStep)}</td><td>${escapeHtml(item.expected)}</td><td>${escapeHtml(item.actual)}</td><td>${escapeHtml(item.reason)}</td><td>${item.evidence ? `<figure><figcaption>${escapeHtml(item.evidence.name)}</figcaption><img alt="${escapeHtml(item.evidence.name)}" src="data:${item.evidence.contentType};base64,${item.evidence.body}"></figure>` : 'Not captured'}</td></tr>`).join('');
+  const metadata = Object.entries(data.additionalMetadata ?? {}).map(([label, value]) => `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</p>`).join('');
+  const selected = data.recordsSelected ?? data.recordsChecked;
+  const attempted = data.recordsAttempted ?? data.recordsChecked;
+  const type = data.dataType.toUpperCase();
+  const finalMessage = auditPassed ? 'Audit execution completed.' : `Audit execution did not complete because validation encountered ${automation.length} automation/execution issue${automation.length === 1 ? '' : 's'}.`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(type)} DATA AUDIT REPORT</title><style>body{font:16px system-ui;margin:32px;color:#17202a}main{max-width:1200px;margin:auto}h1{text-align:center;color:#175cd3}h2{margin-top:30px;border-bottom:1px solid #ccc}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}.card{padding:12px;border:1px solid #ccc;background:#f8fafc}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:8px;text-align:left;vertical-align:top}th{background:#eef2f6}.ok{color:#167c3a}.issue{color:#b42318}.final{padding:14px;background:${auditPassed ? '#f0fdf4' : '#fff1f0'};border-left:4px solid ${auditPassed ? '#167c3a' : '#b42318'};margin-bottom:24px}img{max-width:520px;height:auto}</style></head><body><main><h1>${escapeHtml(type)} DATA AUDIT REPORT</h1><p><strong>Vessel:</strong> ${escapeHtml(data.vessel)}</p><p><strong>Excel File:</strong> ${escapeHtml(data.excelFile)}</p><p><strong>Uploaded By:</strong> ${escapeHtml(data.uploadedBy)}</p><p><strong>Audit Date:</strong> ${escapeHtml(new Date().toLocaleString())}</p><p><strong>Validation Type:</strong> ${escapeHtml(data.validationType)}</p>${metadata}<h2>AUDIT SUMMARY</h2><section class="summary"><div class="card">Successfully Imported Records: ${data.successfullyImported}</div><div class="card">Records Selected: ${selected}</div><div class="card">Records Attempted: ${attempted}</div><div class="card">Records Matched: ${data.recordsMatched}</div><div class="card">Records With Issues: ${issueCount}</div><div class="card">Missing Records: ${data.missingRecords.length}</div><div class="card">Field Mismatches: ${data.fieldMismatches.length}</div><div class="card">Automation Errors: ${automation.length}</div><div class="card ${auditPassed ? 'ok' : 'issue'}">Audit Execution: ${auditPassed ? 'PASSED' : 'FAILED'}</div><div class="card ${validationStatus === 'PASSED' ? 'ok' : 'issue'}">Data Validation: ${validationStatus}</div></section><h2>RECORDS WITH ISSUES</h2>${missingRows ? `<table><thead><tr><th>No.</th>${headers}<th>Issue</th></tr></thead><tbody>${missingRows}</tbody></table>` : `<p>No missing ${escapeHtml(data.dataType)} records found.</p>`}<h2>FIELD MISMATCHES</h2>${mismatchRows ? `<table><thead><tr><th>No.</th>${headers}<th>Field</th><th>Expected</th><th>Actual</th><th>Reason</th></tr></thead><tbody>${mismatchRows}</tbody></table>` : '<p>No field mismatches found.</p>'}<h2>AUTOMATION / EXECUTION ISSUES</h2>${automationRows ? `<table><thead><tr><th>No.</th>${headers}<th>Failed Step</th><th>Expected</th><th>Actual</th><th>Reason</th><th>Evidence</th></tr></thead><tbody>${automationRows}</tbody></table>` : '<p>No automation or execution issues found.</p>'}<h2>FINAL RESULT</h2><section class="final"><p>Successfully Imported: ${data.successfullyImported}</p><p>Selected for Validation: ${selected}</p><p>Attempted: ${attempted}</p><p>Matched: ${data.recordsMatched}</p><p>Require Review: ${issueCount}</p><p>${escapeHtml(finalMessage)}</p></section></main></body></html>`;
+  fs.writeFileSync(reportPath, html, 'utf8');
+  return reportPath;
+}
