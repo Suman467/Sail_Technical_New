@@ -38,6 +38,7 @@ export type BulkImportRunResult = {
   validationErrors: number;
   rejectedWorkbookRows: number[];
   imported: boolean;
+  successfullyImported?: number;
 };
 
 export type BulkImportFolderRunResult = {
@@ -283,7 +284,8 @@ export async function runBulkDataImportScenario(
   console.log(
     `[FLOW] Sending file to browser upload control: ${uploadFileName}`,
   );
-  await bulkImportPage.uploadFile(uploadFile);
+  if (module === "job") await bulkImportPage.uploadJobsFile(uploadFile);
+  else await bulkImportPage.uploadFile(uploadFile);
   console.log(`[FLOW] File submitted: ${uploadFileName}`);
   await recordValidationStep(
     10,
@@ -573,13 +575,26 @@ export async function runBulkDataImportScenario(
     body: await page.screenshot(),
     contentType: "image/png",
   });
-  await recordStep(16, "Import Complete", completeDetails);
   await bulkImportPage.closeImportComplete();
 
   const importSummary = await bulkImportPage.getImportSummary();
   const successfullyImported = Number(importSummary.successfullyImported);
   const importMatchesValidation = successfullyImported === validRowCount;
   const summaryDetails = `Total Records Processed: ${importSummary.totalProcessed}; Successfully Imported: ${importSummary.successfullyImported}; Failed Records: ${importSummary.failedRecords}.`;
+  const completionFailed = completeDetails.match(/Failed:\s*(\d+)/i)?.[1];
+  const completionAgreesWithSummary = completionFailed === undefined
+    || completionFailed === "Not displayed"
+    || completionFailed === importSummary.failedRecords;
+  const completionActual = completionAgreesWithSummary
+    ? `${completeDetails} Final import summary: ${summaryDetails}`
+    : `The Import Complete dialog was displayed, but its per-category counters did not agree with the final import summary and are retained only in the screenshot evidence. Final import summary: ${summaryDetails}`;
+  await recordValidationStep(
+    16,
+    "Import Complete",
+    `The application should complete the ${moduleLabel} import and display counts that agree with the final import summary.`,
+    completionActual,
+    Number(importSummary.failedRecords) === 0 ? "PASS" : "FAIL",
+  );
   await recordValidationStep(
     17,
     "Import Result",
@@ -603,6 +618,7 @@ export async function runBulkDataImportScenario(
       validationErrors.expectedErrorCount ?? validationErrors.errorRows.length,
     rejectedWorkbookRows,
     imported: true,
+    successfullyImported,
   };
 }
 

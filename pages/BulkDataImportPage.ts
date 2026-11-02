@@ -676,8 +676,14 @@ export class BulkDataImportPage extends BasePage {
     ) => {
       const metric = this.page.getByText(label, { exact: true });
       if (!(await metric.count())) return "Not displayed";
+      const containerText = await metric.locator("..").innerText();
+      const metricLabelsInContainer = ["Created", "Updated", "Skipped", "Failed"]
+        .filter((candidate) => new RegExp(`\\b${candidate}\\b`, "i").test(containerText));
+      if (metricLabelsInContainer.length !== 1) return "Not displayed";
+      const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       return (
-        (await metric.locator("..").innerText()).match(/\d+/)?.[0] ??
+        containerText.match(new RegExp(`${escapedLabel}\\s*:?\\s*(\\d+)`, "i"))?.[1] ??
+        containerText.match(new RegExp(`(\\d+)\\s*${escapedLabel}`, "i"))?.[1] ??
         "Not displayed"
       );
     };
@@ -829,6 +835,20 @@ export class BulkDataImportPage extends BasePage {
   }
 
   /**
+   * What this does: Uploads the Jobs workbook via the file input inside the Jobs Upload tab.
+   * When it's used: In Jobs bulk import flows. The Jobs template also renders a
+   * "Work Instruction PDFs" file input above the upload tab, so the page-wide
+   * first file input is the PDF uploader rather than the Jobs workbook uploader.
+   * @param filePath - Absolute or relative path to the CSV/Excel file to upload.
+   * @returns Nothing
+   */
+  public async uploadJobsFile(filePath: string): Promise<void> {
+    await this.uploadTabPanel
+      .locator('input[type="file"]')
+      .setInputFiles(filePath);
+  }
+
+  /**
    * What this does: Clears the selected file from the upload control.
    * When it's used: After a rejected file should be retried or replaced.
    * @returns Nothing
@@ -973,7 +993,12 @@ export class BulkDataImportPage extends BasePage {
       for (let index = 0; index < (await locator.count()); index += 1) {
         const item = locator.nth(index);
         if (!(await item.isVisible().catch(() => false))) continue;
-        const text = (await item.innerText()).replace(/\s+/g, " ").trim();
+        // The broad error selector can legitimately match an SVG icon inside a
+        // toast (for example, an icon styled with text-red-500). SVGElement does
+        // not implement HTMLElement.innerText, so read Node text safely.
+        const text = (await item.textContent() ?? "")
+          .replace(/\s+/g, " ")
+          .trim();
         if (text) messages.push(text);
       }
     }
@@ -1006,18 +1031,28 @@ export class BulkDataImportPage extends BasePage {
       exact: true,
     });
     const deadline = Date.now() + timeout;
+    let rejectionMessages: string[] = [];
     while (Date.now() < deadline) {
-      const messages = await this.readVisibleFileValidationMessages();
-      if (messages.length) {
-        return { status: "rejected", message: messages.join("\n") };
-      }
+      // Validation Results means the file was accepted and parsed, even when
+      // the application also shows a toast about row-level errors. File-level
+      // rejection is used only when the workflow never reaches row validation.
       if (
         (await validationResults.isVisible().catch(() => false)) ||
         (await this.importValidRowsButton.isVisible().catch(() => false))
       ) {
         return { status: "accepted" };
       }
+      const messages = await this.readVisibleFileValidationMessages();
+      if (messages.length) {
+        // A row-error toast can render before Validation Results. Retain it,
+        // but keep polling so that transient ordering cannot turn an accepted
+        // workbook into a file-level rejection.
+        rejectionMessages = messages;
+      }
       await this.page.waitForTimeout(100);
+    }
+    if (rejectionMessages.length) {
+      return { status: "rejected", message: rejectionMessages.join("\n") };
     }
     throw new Error(
       `The application did not display an upload acceptance or rejection response within ${timeout} ms.`,

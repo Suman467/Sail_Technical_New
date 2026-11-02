@@ -7,9 +7,12 @@
     "test": "node ./scripts/run-playwright.cjs",
     "test:smoke": "node ./scripts/run-playwright.cjs --grep @smoke",
     "test:login": "node ./scripts/run-playwright.cjs --grep @login",
+    "cleanup:components": "node ./scripts/run-playwright.cjs --manual-component-cleanup tests/components/clean.spec.ts",
     "report:summary": "start reports/validation",
     "report:detailed": "playwright show-report reports/validation/playwright-html",
     "report:package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-playwright-report.ps1",
+    "report:improve-existing": "node scripts/improve-existing-report-descriptions.cjs",
+    "test:reporting": "node ./scripts/run-playwright.cjs tests/reporting --reporter=line --workers=1",
     "typecheck": "tsc --noEmit",
     "lint": "node ./node_modules/eslint/bin/eslint.js ."
   },

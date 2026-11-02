@@ -1,0 +1,16 @@
+[
+  {
+    "code": "AT040-669E",
+    "name": "Test CMP040 669E",
+    "parentCode": "226001001",
+    "vessel": "AUTO_VESSEL_001",
+    "reason": "No matching active tracking record; safety rules prohibit pattern-only deletion."
+  },
+  {
+    "code": "226001001.001",
+    "name": "Test CMP038 33BD",
+    "parentCode": "226001001",
+    "vessel": "AUTO_VESSEL_001",
+    "reason": "No matching active tracking record; safety rules prohibit pattern-only deletion."
+  }
+]

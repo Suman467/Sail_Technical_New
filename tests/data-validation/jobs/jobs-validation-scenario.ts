@@ -83,7 +83,7 @@ export async function validateImportedJobs(
   const componentsPage = await technicalPage.goToComponents();
   await componentsPage.expectToBeOnPage();
   await componentsPage.selectVessel(config.vesselName);
-  await componentsPage.expandAll();
+  await componentsPage.expandTreeLevels(12);
 
   const missing: string[] = [];
   const mismatches: string[] = [];

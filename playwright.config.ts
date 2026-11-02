@@ -1,7 +1,30 @@
 import { defineConfig } from "@playwright/test";
+import os from "node:os";
+import path from "node:path";
 import { config } from "./utils/config";
 
+// All replacement workers in this Playwright run reuse the same authenticated
+// state. The per-run file lives outside the repository and is not reused by a
+// later command.
+process.env.COMPONENTS_AUTH_STATE_PATH ??= path.join(
+  os.tmpdir(),
+  `sail-components-auth-${process.pid}.json`,
+);
+
 const headless = process.env.HEADLESS?.trim().toLowerCase() === "true";
+const explicitlyTargetedSpecs = process.argv
+  .filter((argument) => !argument.startsWith("-") && /\.spec\.ts$/i.test(argument))
+  .map((argument) => argument.replaceAll("\\", "/").replace(/^\.\//, ""));
+const cleanupSpecExplicitlyTargeted = explicitlyTargetedSpecs.length === 1
+  && (explicitlyTargetedSpecs[0] === "tests/components/clean.spec.ts"
+    || explicitlyTargetedSpecs[0].endsWith("/tests/components/clean.spec.ts"));
+
+// Playwright evaluates this configuration before creating its workers, so an
+// exact direct CLI target can authorize cleanup without making normal suite
+// discovery destructive.
+if (cleanupSpecExplicitlyTargeted) {
+  process.env.MANUAL_COMPONENT_CLEANUP = "true";
+}
 
 export default defineConfig({
   // Maximum time allowed for one test

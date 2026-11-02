@@ -194,7 +194,7 @@ export async function runSparesValidation(
     const componentsPage = await technicalPage.goToComponents();
     await componentsPage.expectToBeOnPage();
     await componentsPage.selectVessel(config.vesselName);
-    await componentsPage.expandAll();
+    await componentsPage.expandTreeLevels(12);
     const componentCodes = new Set(
       (await componentsPage.readExpandedTreeRows()).map((row) =>
         row.code.toLowerCase(),

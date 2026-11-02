@@ -45,11 +45,19 @@ export async function runStoresValidation(options: {
     const actual = await storesPage.readRecord(itemCode);
     if (!actual) {
       missing.push({ itemCode, itemName, storeType: workbook.storeType, issue: `Record not found in ${workbook.storeType} tab` });
-      reportComparisons.push({ recordCode: itemCode, recordName: itemName, field: 'Store record', expected: 'Record should exist in UI', actual: 'Record not found in UI', status: 'MISSING', reason: `The record was not found in the ${workbook.storeType} tab.` });
+      reportComparisons.push({
+        recordCode: itemCode,
+        recordName: itemName,
+        field: 'Store record',
+        expected: `${itemCode} (${itemName}) should be displayed in the ${workbook.storeType} Inventory for vessel ${config.vesselName}.`,
+        actual: `The automation searched the ${workbook.storeType} Inventory for exact Item Code ${itemCode} on vessel ${config.vesselName}, waited for the filtered grid, and did not observe a matching row. Field validation was not reached.`,
+        status: 'MISSING',
+        reason: `No grid row with exact normalized Item Code ${itemCode} was observed after the ${workbook.storeType} search completed.`,
+      });
       await test.info().attach(`Failure Screenshot - Store ${itemCode} - record not found`, { body: await page.screenshot(), contentType: 'image/png' });
       continue;
     }
-    const robComparison = compareStoreRob(record['Total ROB'], actual.rob);
+    const robComparison = compareStoreRob(record['Total ROB'], actual.rob, actual.locationRob);
     const comparisons: Array<{ field: string; expected: string; actual: string; matches?: boolean; reason?: string }> = [
       { field: identifierLabel(workbook.storeType), expected: normalizeStoreText(record['Item Code']), actual: normalizeStoreText(actual.itemCode) },
       { field: nameLabel(workbook.storeType), expected: normalizeStoreText(record['Item Name']), actual: normalizeStoreText(actual.itemName) },
@@ -72,7 +80,7 @@ export async function runStoresValidation(options: {
   const issueCodes = new Set([...missing.map((item) => item.itemCode), ...mismatches.map((item) => item.itemCode)]);
   const matched = records.length - issueCodes.size;
   const result: StoreValidationResult = {
-    successfullyImported: importedRecords.length,
+    successfullyImported: importResult.successfullyImported ?? importedRecords.length,
     totalChecked: records.length,
     matched,
     missing,
@@ -104,7 +112,11 @@ export async function runStoresValidation(options: {
   });
   await test.info().attach(`${workbook.storeType} audit report`, { path: reportPath, contentType: 'text/html' });
 
-  await test.step(`Compare imported ${workbook.storeType} Excel records with the matching Stores UI tab`, async () => {
+  await test.step([
+    `Compare imported ${workbook.storeType} Excel records with the matching Stores UI tab`,
+    `Expected: All ${result.totalChecked} accepted ${workbook.storeType} records should exist in vessel ${config.vesselName} and match their workbook values.`,
+    `Actual: Checked ${result.totalChecked} ${workbook.storeType} records in vessel ${config.vesselName}; ${result.matched} matched, ${result.missing.length} were missing, and ${result.mismatches.length} field mismatches were observed.`,
+  ].join('\n'), async () => {
     expect(result.missing, `Every accepted ${workbook.storeType} record should exist in the matching UI tab.`).toEqual([]);
     expect(result.mismatches, `Every accepted ${workbook.storeType} record should match its Excel values.`).toEqual([]);
   });

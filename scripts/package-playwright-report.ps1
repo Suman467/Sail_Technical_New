@@ -8,6 +8,39 @@ $technicalReportDirectory = Join-Path $validationReportDirectory 'playwright-htm
 $specificationDirectory = Join-Path $projectRoot 'tests'
 $zipPath = Join-Path $validationReportDirectory 'Playwright-Reports.zip'
 $previousZipPath = Join-Path $validationReportDirectory 'Playwright-HTML-Report.zip'
+$temporaryZipPath = "$zipPath.$PID.$([Guid]::NewGuid().ToString('N')).tmp"
+$zipReplaceAttempts = 3
+$zipReplaceRetryMilliseconds = 300
+
+function Invoke-ZipFileOperationWithRetry {
+    param(
+        [Parameter(Mandatory = $true)] [scriptblock] $Operation,
+        [Parameter(Mandatory = $true)] [string] $Description
+    )
+
+    for ($attempt = 1; $attempt -le $zipReplaceAttempts; $attempt++) {
+        try {
+            & $Operation | Out-Null
+            return $true
+        }
+        catch [System.IO.IOException] {
+            if ($attempt -eq $zipReplaceAttempts) {
+                Write-Warning "$Description could not complete because the ZIP file remained locked after $zipReplaceAttempts attempts. Report packaging was skipped. $($_.Exception.Message)"
+                return $false
+            }
+            Start-Sleep -Milliseconds $zipReplaceRetryMilliseconds
+        }
+        catch [System.UnauthorizedAccessException] {
+            if ($attempt -eq $zipReplaceAttempts) {
+                Write-Warning "$Description could not complete because the ZIP file remained unavailable after $zipReplaceAttempts attempts. Report packaging was skipped. $($_.Exception.Message)"
+                return $false
+            }
+            Start-Sleep -Milliseconds $zipReplaceRetryMilliseconds
+        }
+    }
+
+    return $false
+}
 
 if (-not (Test-Path -LiteralPath $technicalReportDirectory -PathType Container)) {
     throw 'The Playwright HTML report directory was not found.'
@@ -20,26 +53,23 @@ Get-ChildItem -LiteralPath $specificationDirectory -Recurse -File -Filter '*.spe
     $specReportNames[$reportName] = $true
 }
 
-if (Test-Path -LiteralPath $zipPath) {
-    Remove-Item -LiteralPath $zipPath -Force
-}
-
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$archive = [System.IO.Compression.ZipFile]::Open($zipPath, [System.IO.Compression.ZipArchiveMode]::Create)
+$archive = [System.IO.Compression.ZipFile]::Open($temporaryZipPath, [System.IO.Compression.ZipArchiveMode]::Create)
 try {
     @(
         @{ Directory = $validationReportDirectory; ArchiveFolder = 'validation' },
         @{ Directory = $auditReportDirectory; ArchiveFolder = 'audit' }
     ) | Where-Object { Test-Path -LiteralPath $_.Directory -PathType Container } | ForEach-Object {
         $reportGroup = $_
-        Get-ChildItem -LiteralPath $reportGroup.Directory -File -Filter '*.html' |
+        Get-ChildItem -LiteralPath $reportGroup.Directory -Recurse -File -Filter '*.html' |
             Where-Object { $specReportNames.ContainsKey($_.Name) } |
             ForEach-Object {
+                $relativeReportPath = $_.FullName.Substring($reportGroup.Directory.Length).TrimStart([char[]]@('\', '/')).Replace('\', '/')
                 [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
                     $archive,
                     $_.FullName,
-                    "$($reportGroup.ArchiveFolder)/$($_.Name)",
+                    "$($reportGroup.ArchiveFolder)/$relativeReportPath",
                     [System.IO.Compression.CompressionLevel]::Optimal
                 ) | Out-Null
             }
@@ -60,9 +90,24 @@ finally {
     $archive.Dispose()
 }
 
+$packagePublished = Invoke-ZipFileOperationWithRetry -Description "Replacing $zipPath" -Operation {
+    Move-Item -LiteralPath $temporaryZipPath -Destination $zipPath -Force
+}
+
+if (-not $packagePublished) {
+    Remove-Item -LiteralPath $temporaryZipPath -Force -ErrorAction SilentlyContinue
+    Write-Warning "Validation and cleanup reports were generated successfully, but $zipPath was not updated. Close any program using the ZIP and run npm run report:package to retry packaging."
+    exit 0
+}
+
 # Remove the previous archive name after the replacement package was created successfully.
 if (Test-Path -LiteralPath $previousZipPath) {
-    Remove-Item -LiteralPath $previousZipPath -Force
+    $previousPackageRemoved = Invoke-ZipFileOperationWithRetry -Description "Removing legacy report package $previousZipPath" -Operation {
+        Remove-Item -LiteralPath $previousZipPath -Force
+    }
+    if (-not $previousPackageRemoved) {
+        Write-Warning "The new report package was created, but the locked legacy package could not be removed."
+    }
 }
 
 Write-Output "Created $zipPath"

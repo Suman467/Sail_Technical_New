@@ -8,7 +8,7 @@ test(
     await runSparesValidation({
       page,
       auditDashboardPage,
-      location: 'components',
+      location: 'spares-module',
       upload: true,
       strict: true,
       includeAuditSummary: true,

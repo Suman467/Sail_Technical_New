@@ -53,6 +53,12 @@ export function normalizeJobDate(value: unknown): string {
     if (parsed)
       return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
   }
+  // The Jobs grid displays DD-MM-YYYY; Date() would read it as MM-DD-YYYY.
+  const dayFirst = text.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (dayFirst) {
+    const [, day, month, year] = dayFirst;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
   const date = new Date(text);
   if (!Number.isNaN(date.getTime())) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;

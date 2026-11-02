@@ -23,7 +23,7 @@ export class AuditDashboardPage extends BasePage {
    */
   public constructor(page: Page) {
     super(page);
-    this.pageLoadedIndicator = page.getByRole('button', { name: 'Audit', exact: true });
+    this.pageLoadedIndicator = page.getByText('Audit', { exact: true }).filter({ visible: true }).first();
     this.technicalMenuItem = page.getByRole('menuitem', { name: 'Technical', exact: true });
   }
 

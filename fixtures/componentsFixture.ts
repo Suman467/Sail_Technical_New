@@ -1,5 +1,6 @@
 import { test as base, expect } from './baseFixture';
 import { ComponentsPage } from '../pages/ComponentsPage';
+import { openPrimaryComponentsSession, restoreComponentsPage } from '../utils/componentsSession';
 
 /**
  * Provides the shared Components page setup used by component tests.
@@ -12,12 +13,15 @@ export const test = base.extend<{ componentsPage: ComponentsPage }>({
    * @param testLifecycle - The shared setup hook that keeps the test lifecycle consistent.
    * @returns Nothing
    */
-  componentsPage: async ({ auditDashboardPage, testLifecycle }, use) => {
+  componentsPage: async ({ browser, testLifecycle }, use) => {
     void testLifecycle;
-    const technicalPage = await auditDashboardPage.goToTechnical();
-    const componentsPage = await technicalPage.goToComponents();
-    await componentsPage.expectToBeOnPage();
-    await use(componentsPage);
+    const session = await openPrimaryComponentsSession(browser);
+    try {
+      await use(session.components);
+      await restoreComponentsPage(session.page, session.components);
+    } finally {
+      await session.context.close();
+    }
   },
 });
 

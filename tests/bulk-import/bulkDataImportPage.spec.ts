@@ -8,6 +8,7 @@ test("captures the complete visible unsupported-file toast as the actual UI resu
   await page.setContent(`
     <main><h1>Bulk Data Import</h1></main>
     <section data-sonner-toast data-type="error">
+      <svg class="text-red-500" aria-label="error icon"><path /></svg>
       <strong>Invalid File</strong>
       <div>Please upload a .xlsx, .xls, or .csv file</div>
     </section>
@@ -29,6 +30,23 @@ test("detects application upload acceptance from validation results", async ({
   await page.setContent(`
     <h2>Validation Results</h2>
     <button>Import 1 Records</button>
+  `);
+  const bulkImportPage = new BulkDataImportPage(page);
+  await expect(bulkImportPage.waitForUploadResponse(1_000)).resolves.toEqual({
+    status: "accepted",
+  });
+});
+
+test("treats row validation errors as an accepted upload", async ({ page }) => {
+  await page.setContent(`
+    <h2>Validation Results</h2>
+    <p>Errors: 1</p>
+    <section data-sonner-toast data-type="error">
+      <svg class="text-red-500"><path /></svg>
+      <strong>Validation Complete</strong>
+      <div>Found 1 error(s). Review before importing.</div>
+    </section>
+    <button>Skip Errors & Import 2 Valid Rows</button>
   `);
   const bulkImportPage = new BulkDataImportPage(page);
   await expect(bulkImportPage.waitForUploadResponse(1_000)).resolves.toEqual({
@@ -139,8 +157,8 @@ for (const mode of ["Add Only", "Update Only", "Add + Update"]) {
       else await bulkImportPage.submitImport();
       if (hasErrors) await bulkImportPage.confirmPartialImport();
       else await expect(page.getByRole("alertdialog")).toBeHidden();
-      expect(await bulkImportPage.waitForImportComplete()).toContain(
-        `Created: ${accepted.length}`,
+      expect(await bulkImportPage.waitForImportComplete()).toBe(
+        `Created: ${accepted.length}; Updated: 0; Skipped: ${rejected.length}; Failed: 0.`,
       );
     });
   }

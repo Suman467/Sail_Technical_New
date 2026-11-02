@@ -49,11 +49,22 @@ export class WorkOrderPage extends BasePage {
    * @returns Nothing
    */
   public async selectVessel(name = config.vesselName): Promise<void> {
+    if ((await this.vesselDropdown.textContent() ?? '').includes(name)) return;
     await this.vesselDropdown.click();
     await Promise.all([
       this.page.waitForResponse((response) => response.url().includes('/technical/api/work-orders') && response.request().method() === 'GET' && response.status() === 200),
       this.page.getByRole('option', { name, exact: true }).click(),
     ]);
+  }
+
+  /** Searches the current Work Order tab and returns every displayed data row. */
+  public async searchRows(text: string): Promise<Locator> {
+    const search = this.page.getByPlaceholder('Search work orders...');
+    await expect(search, 'The Work Orders search should be available').toBeVisible();
+    await search.fill(text);
+    const rows = this.page.locator('[role="row"]:has([role="gridcell"])');
+    await expect.poll(() => rows.count(), { message: `Work Order search for ${text} should return a row` }).toBeGreaterThan(0);
+    return rows;
   }
 
   /**
@@ -178,6 +189,29 @@ export class WorkOrderPage extends BasePage {
     await expect(result, `Work Order ${workOrderNumber} should appear in search results`).toBeVisible();
     await Promise.all([this.page.waitForURL(/\/technical\/pms\/work-order\/[^/]+$/), result.click()]);
     return new WorkOrderApprovalPage(this.page);
+  }
+
+  /**
+   * Searches each status tab for one exact Work Order Number and returns the
+   * tab it was listed under with its row values keyed by column header.
+   * Returns undefined when no tab lists it.
+   */
+  public async findWorkOrder(workOrderNumber: string): Promise<{ tab: string; values: Record<string, string>; rowText: string } | undefined> {
+    const search = this.page.getByPlaceholder('Search work orders...');
+    const cell = this.page.getByRole('gridcell').filter({ hasText: workOrderNumber });
+    for (const tabName of this.tabNames) {
+      if (!(await this.tab(tabName).first().isVisible().catch(() => false))) continue;
+      if (!(await this.openTab(tabName).then(() => true, () => false))) continue;
+      await expect(search, 'The Work Orders search should be available').toBeVisible();
+      await search.fill(workOrderNumber);
+      if (!(await cell.first().waitFor({ state: 'visible', timeout: 5_000 }).then(() => true, () => false))) continue;
+      const row = this.page.getByRole('row').filter({ has: cell }).first();
+      const headers = (await this.page.getByRole('columnheader').allInnerTexts()).map((text) => text.replace(/\s+/g, ' ').trim());
+      const cells = (await row.getByRole('gridcell').allInnerTexts()).map((text) => text.replace(/\s+/g, ' ').trim());
+      const values = Object.fromEntries(headers.map((header, index) => [header, cells[index] ?? '']).filter(([header]) => header));
+      return { tab: tabName, values, rowText: cells.join(' | ') };
+    }
+    return undefined;
   }
 
   /**

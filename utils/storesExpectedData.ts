@@ -53,21 +53,68 @@ export type StoreRobComparison = {
   reason?: string;
 };
 
-/** Applies the Stores-only ROB rule that blank Excel and UI numeric zero are equivalent. */
-export function compareStoreRob(expectedValue: unknown, actualValue: unknown): StoreRobComparison {
-  const expected = normalizeStoreRob(expectedValue);
-  const actual = normalizeStoreRob(actualValue);
-  if (expected === '' && actual === '0') {
+const robNumber = (value: string): number | undefined => {
+  if (!value) return undefined;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : undefined;
+};
+
+/** Reads Location A and Location B ROB from the Stores grid Location cell, shown as "@ A / B". */
+export function parseStoreLocationRob(locationCell: unknown): { locationA: string; locationB: string } {
+  const match = String(locationCell ?? '').match(/@\s*([^/]*?)\s*\/\s*(.*?)\s*$/);
+  return { locationA: normalizeStoreRob(match?.[1]), locationB: normalizeStoreRob(match?.[2]) };
+}
+
+/**
+ * Stores ROB rule: UI Total ROB must equal UI Location A ROB + Location B ROB.
+ * The uploaded Excel Total ROB is reported for information only; a blank Excel total is equivalent to zero.
+ */
+export function compareStoreRob(excelTotalValue: unknown, uiTotalValue: unknown, uiLocationCell: unknown): StoreRobComparison {
+  const excelTotal = normalizeStoreRob(excelTotalValue);
+  const uiTotal = normalizeStoreRob(uiTotalValue);
+  const { locationA, locationB } = parseStoreLocationRob(uiLocationCell);
+  const a = robNumber(locationA);
+  const b = robNumber(locationB);
+  const total = robNumber(uiTotal);
+  const excelLabel = excelTotal || '<blank>';
+  const observed = `Location A ROB ${locationA || '<blank>'}, Location B ROB ${locationB || '<blank>'}, UI Total ROB ${uiTotal || '<blank>'}, Excel Total ROB ${excelLabel}`;
+
+  if (a === undefined || b === undefined || total === undefined) {
+    const invalid = [['Location A ROB', a], ['Location B ROB', b], ['UI Total ROB', total]]
+      .filter(([, value]) => value === undefined).map(([label]) => label);
+    return {
+      expected: 'Location A ROB, Location B ROB and UI Total ROB should be numeric so Total ROB can be calculated',
+      actual: `${observed} (UI Location cell: "${String(uiLocationCell ?? '').trim() || '<blank>'}")`,
+      matches: false,
+      reason: `Validation issue: the ROB calculation could not be verified because ${invalid.join(', ')} ${invalid.length === 1 ? 'is' : 'are'} missing or not numeric in the UI.`,
+    };
+  }
+
+  const calculated = Number((a + b).toFixed(6));
+  const expected = `${calculated} (Location A ROB ${a} + Location B ROB ${b})`;
+  if (Math.abs(total - calculated) > 1e-6) {
     return {
       expected,
-      actual,
+      actual: uiTotal,
+      matches: false,
+      reason: `UI Total ROB is incorrect. Expected calculated total ${calculated} (Location A ROB ${a} + Location B ROB ${b}), but the UI shows Total ROB ${total}. Excel Total ROB: ${excelLabel}.`,
+    };
+  }
+
+  const excelNumber = excelTotal === '' ? 0 : robNumber(excelTotal);
+  if (excelNumber === undefined || Math.abs(excelNumber - calculated) > 1e-6) {
+    const note = 'UI Total ROB is correct. Total ROB in the uploaded Excel file is incorrect.';
+    return {
+      expected,
+      actual: `${uiTotal} — ${note} (Excel Total ROB: ${excelLabel})`,
       matches: true,
-      reason: 'Blank Excel value and UI zero are treated as equivalent.',
+      reason: `${note} Location A ROB ${a} + Location B ROB ${b} = ${calculated}; UI Total ROB ${total}; Excel Total ROB ${excelLabel}.`,
     };
   }
   return {
     expected,
-    actual,
-    matches: expected === actual,
+    actual: uiTotal,
+    matches: true,
+    reason: `UI Total ROB equals Location A ROB + Location B ROB (${a} + ${b} = ${calculated}). Excel Total ROB ${excelTotal === '' ? '<blank>, treated as 0,' : excelTotal} also agrees.`,
   };
 }

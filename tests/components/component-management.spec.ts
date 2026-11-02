@@ -1,4 +1,7 @@
 import { expect, test } from '../../fixtures/componentsFixture';
+import { trackCreatedComponent } from '../../utils/componentCreationTracker';
+
+test.use({ requiresLogin: false });
 
 /**
  * What this does: Checks that the Components page loads and the visible count matches the list data.
@@ -37,18 +40,23 @@ test('Component list can be filtered by vessel', { tag: ['@regression', '@compon
  * @returns Nothing
  */
 test('A component can be added and then edited', { tag: ['@regression', '@components', '@positive', '@negative'] }, async ({ componentsPage }) => {
+  const vessel = 'PMS Test 3';
+  const runId = `${new Date().toISOString()}-${process.pid}`;
   await test.step('Components page is shown', async () => componentsPage.expectToBeOnPage());
-  await test.step('Select vessel PMS Test 3', async () => componentsPage.selectVessel('PMS Test 3'));
+  await test.step('Select vessel PMS Test 3', async () => componentsPage.selectVessel(vessel));
   const form = await test.step('Open the Add Component form', async () => componentsPage.openComponentForAdd());
   const code = `AUTO-${Date.now()}`;
   const name = `Automated Component ${Date.now()}`;
+  let parentCode = '';
   await test.step('Saving with empty mandatory fields shows validation errors', async () => {
     await form.save();
     await expect.poll(() => form.validationErrorsVisible(), 'Mandatory Component fields should show validation errors').toBe(true);
   });
   await test.step('Component is created with valid data', async () => {
     await form.fillMandatoryFields(code, name);
-    await form.save();
+    parentCode = await form.value('Parent Component Code', 'input-parent-component');
+    expect(await form.save()).toBe(true);
+    await trackCreatedComponent({ code, name, vessel, parentCode, sourceSpec: 'component-management.spec.ts', testCaseId: 'A component can be added and then edited', runId, createdAt: new Date().toISOString() });
     await expect.poll(() => form.successMessageVisible(), 'A component save success message should be shown').toBe(true);
   });
   const row = await componentsPage.findRowByCode(code);
@@ -59,7 +67,8 @@ test('A component can be added and then edited', { tag: ['@regression', '@compon
   const editForm = await test.step(`Open Component ${code} for editing`, async () => componentsPage.openRowForEdit(row));
   await test.step(`Component ${code} can be edited`, async () => {
     await editForm.fillMandatoryFields(code, updatedName);
-    await editForm.save();
+    expect(await editForm.save()).toBe(true);
+    await trackCreatedComponent({ code, name: updatedName, vessel, parentCode, sourceSpec: 'component-management.spec.ts', testCaseId: 'A component can be added and then edited', runId, createdAt: new Date().toISOString() });
     await expect.poll(() => editForm.successMessageVisible(), `Component ${code} should show an update success message`).toBe(true);
   });
   await test.step(`Component ${code} shows the updated name`, async () => {

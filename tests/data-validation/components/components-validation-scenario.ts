@@ -1033,7 +1033,7 @@ export async function collectComponentAuditComparison(
   const componentsPage = await technicalPage.goToComponents();
   await componentsPage.expectToBeOnPage();
   await componentsPage.selectVessel(config.vesselName);
-  await componentsPage.expandAll();
+  await componentsPage.expandTreeLevels(12);
   const actualRows = await componentsPage.readExpandedTreeRows();
   const treeComparison = compareComponentTree(
     actualRows,
@@ -1153,7 +1153,7 @@ export async function validateComponentsPage(
     `${config.vesselName} selected and Components page loaded.`,
   );
 
-  await componentsPage.expandAll();
+  await componentsPage.expandTreeLevels(12);
 
   await test.info().attach("Components hierarchy expanded", {
     body: await page.screenshot(),
@@ -1496,7 +1496,7 @@ async function validateCachedData(
 
   await componentsPage.selectVessel(config.vesselName);
 
-  await componentsPage.expandAll();
+  await componentsPage.expandTreeLevels(12);
 
   const refreshedComponents = await componentsPage.readExpandedTreeRows();
 

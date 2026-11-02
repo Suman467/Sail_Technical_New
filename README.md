@@ -404,6 +404,8 @@ The configuration retains traces and screenshots on failure. The base fixture al
 
 `utils/SimpleReporter.ts` is registered once in `playwright.config.ts`. It automatically creates the existing Validation Report and ensures the existing standard Audit Report for every completed `.spec.ts` file. Bulk Import specs and future specs do not need their own HTML generator or reporter configuration.
 
+Project-wide reports distinguish Passed, Failed, intentionally Skipped, and Not Executed test cases. They keep technical diagnostics separate from business Expected/Actual Results and provide filters for each outcome. Run `npm run test:reporting` for the focused shared-reporting checks; these tests do not execute the application E2E suite.
+
 For a normal new spec, write clear `test.step(...)` calls and use the existing fixture. The common reporter will automatically record the test result, business steps, expected/actual text, status, duration, and available evidence.
 
 When a new data-comparison spec has record-level Expected and Actual values, attach one JSON array using a name that contains `validation comparison data`. Use the existing comparison shape:

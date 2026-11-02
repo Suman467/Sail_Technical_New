@@ -8,3 +8,13 @@ node_modules/
 /playwright/.cache/
 /playwright/.auth/
 debug.log
+
+# Generated reports and temporary files
+/reports/
+/.tmp/
+
+# AI assistant folders
+/.codex/
+/.claude/
+
+

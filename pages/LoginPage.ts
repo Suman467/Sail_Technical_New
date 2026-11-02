@@ -44,9 +44,27 @@ export class LoginPage extends BasePage {
    * @returns The dashboard page after a successful sign-in.
    */
   public async login(username = config.username, password = config.password, domain = config.domain): Promise<AuditDashboardPage> {
+    const dashboard = await this.submitCredentials(username, password, domain);
+    await dashboard.expectToBeOnPage();
+    return dashboard;
+  }
+
+  /** Signs in for PMS navigation while accepting either supported authenticated landing route. */
+  public async loginForPms(username: string, password: string, domain = config.domain): Promise<AuditDashboardPage> {
+    const dashboard = await this.submitCredentials(username, password, domain);
+    await this.page.waitForURL(/\/(?:home|audit\/dashboard\/summary)(?:[/?#]|$)/, { timeout: 30_000 });
+    await expect(dashboard.pageLoadedIndicator, 'The authenticated landing page should show the Audit application entry').toBeVisible();
+    await expect(this.page, 'Login should finish on an authenticated application page').toHaveURL(/\/(?:home|audit\/dashboard\/summary)(?:[/?#]|$)/);
+    return dashboard;
+  }
+
+  private async submitCredentials(username: string, password: string, domain: string): Promise<AuditDashboardPage> {
     await this.usernameField.fill(username);
     await this.passwordField.fill(password);
     await this.domainField.fill(domain);
+    // Commit the final Angular form control so its validation state updates
+    // before checking the submit button.
+    await this.domainField.press('Tab');
     await expect(this.loginButton).toBeEnabled();
     await this.loginButton.click();
 
@@ -56,7 +74,6 @@ export class LoginPage extends BasePage {
       await this.proceedButton.click();
     }
 
-    await dashboard.expectToBeOnPage();
     return dashboard;
   }
 }
