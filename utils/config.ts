@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 
 dotenv.config({ override: true });
 
-export const DATA_VALIDATION_LIMIT = 30;
+export const DATA_VALIDATION_LIMIT = 10;
 export const BULK_IMPORT_MAX_UPLOAD_SIZE_MB = 20;
 export const BULK_IMPORT_MAX_UPLOAD_SIZE_BYTES = BULK_IMPORT_MAX_UPLOAD_SIZE_MB * 1024 * 1024;
 export const SPARE_LIMIT = 10
@@ -20,9 +20,9 @@ export const LINKED_SPARES_SETTINGS: {
   spareSeed?: number | string | null;
 } = {
   // CMP-142 to CMP-146: unique components each test case may inspect; undefined, null or "" = no limit.
-  componentLimit: 40,
+  componentLimit: 60,
   // CMP-142/CMP-143 only: unique spares validated in total per test case (each case counts separately); undefined, null or "" = ALL spares.
-  spareLimit: 40,
+  spareLimit: 60,
   // CMP-142/CMP-143 only: random seed for that sample; undefined, null or "" = new seed per test case.
   spareSeed: undefined,
 };
