@@ -50,11 +50,13 @@ VESSEL_NAME="your-vessel-name"
 HEADLESS="false"
 ```
 
-`utils/config.ts` loads these values with `dotenv` and stops with a clear error if one is missing. `.env` is ignored by Git; never commit credentials.
+`utils/config.ts` loads environment values with `dotenv`. It immediately checks the core connection values and reads suite-specific values when those scenarios need them. `.env` is ignored by Git; never commit credentials.
+
+The actual `.env.example` also contains placeholders for `USERNAME_2`, `PASSWORD_2`, `VESSEL_A`, `COMPONENT_CODE`, `EMPTY_VESSEL`, `CMP008_COMPONENT_PREFIX`, and `CMP008_PARENT_CODE`. Copy those entries unchanged and replace only their placeholder values with approved test-environment values. The code has a `VESSEL_B` getter, but `.env.example` does not currently define `VESSEL_B`; this is an unresolved configuration inconsistency for any scenario that requests it. `COMPONENT_DEPARTMENT` is optional and defaults to `Engine`.
 
 Use `HEADLESS="true"` on CI or a machine without a graphical desktop. Omit it or use `HEADLESS="false"` to keep the visible local browser behavior.
 
-Some older component and work-order tests use `PMS Test 3` directly instead of `VESSEL_NAME`. Review [Known review items](#known-review-items) before using another environment.
+Some older component and work-order tests use `PMS Test 3` directly instead of `VESSEL_NAME`. Review [Known unresolved items](#known-unresolved-items) before using another environment.
 
 ### 4. Check test data
 
@@ -64,12 +66,17 @@ Real bulk-import and audit tests need the files under `test-data/`. Standard mod
 
 The configuration uses one worker. Chromium is headed by default and becomes headless when `HEADLESS=true`.
 
+> **Warning:** `npm test` runs the full discovered suite. It can upload workbooks, create or edit Components, and create, submit, or approve Work Orders. Run it only in the approved test environment with permission to modify that data. Normal test execution does not automatically clean up the records it creates.
+
 ```powershell
 # All tests
 npm test
 
 # One spec
 npm test -- tests/login/login.spec.ts
+
+# One named test in a spec
+npm test -- tests/components/components-linked-spares.spec.ts --grep CMP-144
 
 # A Windows-style path also works through the project runner
 npm test -- tests\workorders\work-order-counts.spec.ts
@@ -86,7 +93,17 @@ npm test -- --grep @components
 npm test -- --list
 ```
 
-### 6. Open reports
+### 6. Manual Components cleanup
+
+Components cleanup is a separate, explicitly authorized operation:
+
+```powershell
+npm run cleanup:components
+```
+
+This command directly targets `tests/components/clean.spec.ts`. Cleanup must never run automatically during normal tests, full-suite execution, or teardown. The cleanup spec skips itself unless the required manual authorization is present and processes only tracked or explicitly approved Component identities.
+
+### 7. Open reports
 
 ```powershell
 # Detailed Playwright report
@@ -127,10 +144,16 @@ Sail_Technical_New/
 |-- test-data/                             # Excel, JSON, and upload inputs
 |-- tests/
 |   |-- bulk-import/                       # Bulk upload tests and shared workflow
-|   |-- components/                        # Component management tests
-|   |-- data-validation/                   # Excel-to-UI validation and audits
+|   |-- components/                        # Components CMP suites and manual cleanup
+|   |-- data-validation/
+|   |   |-- components/                    # Components and Running Hours audits
+|   |   |-- jobs/                          # Jobs audits
+|   |   |-- location/                      # Location audit
+|   |   |-- spares/                        # Spares audits
+|   |   `-- stores/                        # Stores audits
 |   |-- login/                             # Login test
 |   |-- navigation/                        # Menu navigation test
+|   |-- reporting/                         # Shared reporting-standard tests
 |   `-- workorders/                        # Work Order tests
 |-- utils/                                 # Config, Excel readers, routes, and reports
 |-- .env.example                           # Environment template
@@ -193,13 +216,16 @@ BasePage
 
 Update a locator in the page class that owns its screen. Keep reusable multi-page business flow in a scenario helper.
 
-## Fixtures
+## Authentication and fixtures
 
-`fixtures/baseFixture.ts` supplies `loginPage`, `auditDashboardPage`, `requiresLogin`, and an automatic login/failure-evidence lifecycle. `requiresLogin` defaults to `true`.
+The framework currently uses more than one login mechanism:
 
-`fixtures/componentsFixture.ts` extends it with `componentsPage`. It opens Audit -> Technical -> Components before each component-management test.
+- `fixtures/baseFixture.ts` supplies `loginPage`, `auditDashboardPage`, `requiresLogin`, and failure evidence. It logs in before each test that uses this fixture when `requiresLogin` is `true`. The login spec sets `requiresLogin: false` so it can test the form itself.
+- `fixtures/componentsFixture.ts` extends the base fixture with `componentsPage` and therefore follows the base fixture's per-test login behavior.
+- Specialized Components suites use `utils/componentsSession.ts`. That helper authenticates the primary user once per live Playwright worker and reuses its authenticated state for isolated Components contexts. A replacement worker may reuse the run-scoped saved state; if it has expired, the helper performs a recovery login.
+- Scenarios that genuinely need another user create a separate authenticated context for that user.
 
-The logout block in `baseFixture.ts` is commented out. Browser context cleanup ends the session instead of clicking Logout.
+A replacement worker does not preserve the previous worker's in-memory browser context. The logout block in `baseFixture.ts` is commented out; Playwright closes the test context instead of clicking Logout.
 
 ## Test data
 
@@ -209,7 +235,7 @@ The logout block in `baseFixture.ts` is commented out. Browser context cleanup e
 | `test-data/bulk-import/Job/`                                    | Job bulk-import modes                               |
 | `test-data/bulk-import/Spares/`                                 | Spares bulk-import modes                            |
 | `test-data/location/`                                           | Location Add + Update                               |
-| `test-data/components-validation/Components Updated.xlsx`       | Component, hierarchy, and Running Hours validation  |
+| `test-data/Components Updated.xlsx`                             | Component, hierarchy, and Running Hours validation  |
 | `test-data/components-validation/components-expected-data.json` | Saved/reference component expected data             |
 | `test-data/components-validation/components-import-result.json` | Persisted component import metadata used by helpers |
 | `test-data/job-validation/`                                     | Job upload and post-import audit                    |
@@ -218,14 +244,15 @@ The logout block in `baseFixture.ts` is commented out. Browser context cleanup e
 
 Required but currently absent:
 
-- `test-data/bulk-import/file-size-validation/`: one supported `.xlsx`, `.xls`, or `.csv` file larger than 20 MB.
-- `test-data/bulk-import/invalid-file-type/`: one `.doc` or `.docx` file.
+- `test-data/bulk-import/file-size-validation/`: the file-size scenario resolves its input only from this directory and requires one supported `.xlsx`, `.xls`, or `.csv` file larger than 20 MB. The existing `test-data/21mb.csv` is outside that resolver path and is not used by the scenario.
 
 `utils/testDataFile.ts` resolves these files. Its single-file helpers fail if there is no suitable file or more than one, so do not keep backup workbooks in those folders.
 
+The invalid-file-type scenario does not use a separate `invalid-file-type` folder. Its current implementation reads the first file from the root `test-data/bulk-import/` directory; the present unsupported input there is `Playwright_UI_Automation_Framework_Guide.docx`.
+
 ## Test specs and their purpose
 
-There are 28 spec files and 43 collected tests. Loop-based specs create multiple tests.
+There are currently 44 `.spec.ts` files. This README does not claim an exact collected test count because loop-generated and data-driven cases can change with repository data.
 
 ### Login, navigation, and Components
 
@@ -240,6 +267,25 @@ Protects Audit -> Technical -> Work Orders navigation. The fixture logs in, then
 #### `tests/components/component-management.spec.ts`
 
 Contains three tests using `componentsFixture.ts`, `ComponentsPage.ts`, and `ComponentFormPage.ts`: list count equals visible rows; filtering by `PMS Test 3` keeps the count correct; and an add/edit flow. The last test checks empty-field errors, creates a timestamped component, edits its name, and verifies it. End result: the list and basic component maintenance work.
+
+#### Current Components CMP suites
+
+The `tests/components/` folder also contains these discovered suites:
+
+- `components-add-required-fields.spec.ts`
+- `components-deleted-by-another-user.spec.ts`
+- `components-edit-and-persistence.spec.ts`
+- `components-linked-jobs-work-orders.spec.ts`
+- `components-linked-spares.spec.ts`
+- `components-maker-department-optional-fields.spec.ts`
+- `components-navigation-vessel-scope.spec.ts`
+- `components-parent-relationships-uniqueness.spec.ts`
+- `components-rotation-items-stamps.spec.ts`
+- `components-running-hours-condition-monitoring.spec.ts`
+- `components-tree-search-filters.spec.ts`
+- `clean.spec.ts` — manual cleanup only; skipped unless explicitly authorized
+
+Together these cover Components navigation and vessel scope, required and optional fields, persistence, hierarchy and uniqueness, tree search and filtering, linked Jobs, Work Orders and Spares, Running Hours, condition monitoring, rotation items, stamps, concurrency behavior, and controlled cleanup.
 
 ### Bulk import
 
@@ -291,7 +337,7 @@ Checks that Components upload rejects a supported file larger than 20 MB. It val
 
 #### `tests/bulk-import/bulkDataImport-invalid-file-type.spec.ts`
 
-Checks that Components upload rejects Word files and lists `.xlsx`, `.xls`, or `.csv` as supported. It cannot complete until `test-data/bulk-import/invalid-file-type/` is supplied. The Word file currently under `Components/` is not read by this spec.
+Checks that Components upload rejects an unsupported file and lists `.xlsx`, `.xls`, or `.csv` as supported. The current resolver reads the first file from `test-data/bulk-import/`; the unsupported Word file in that directory is therefore the present input. Files under `test-data/components-validation/` are not used by this spec.
 
 #### `tests/bulk-import/bulkDataImportPage.spec.ts`
 
@@ -323,7 +369,7 @@ Imports with Add + Update, keeps accepted child records with a Parent Component 
 
 #### `tests/data-validation/components/components-validation-audit-partially.spec.ts`
 
-Performs the same import but audits the first `DATA_VALIDATION_LIMIT` accepted child records (currently 10). End result: the sample matches while the report keeps the full imported count.
+Performs the same import but audits the first `DATA_VALIDATION_LIMIT` accepted child records. `utils/config.ts` currently sets that limit to 30. End result: the sample matches while the report keeps the full imported count.
 
 ### Jobs validation
 
@@ -335,7 +381,7 @@ Audits every accepted Job. End result: each Job exists under the correct Compone
 
 #### `tests/data-validation/jobs/jobs-validation-audit-partially.spec.ts`
 
-Audits the first 10 accepted Jobs. End result: the sample matches and a partial report is created.
+Audits the first `DATA_VALIDATION_LIMIT` accepted Jobs; the current configured value is 30. End result: the sample matches and a partial report is created.
 
 ### Spares validation
 
@@ -347,7 +393,7 @@ Strictly audits every accepted Spare. End result: no accepted Spare is missing o
 
 #### `tests/data-validation/spares/spares-validation-audit-partially.spec.ts`
 
-Strictly audits the first 10 accepted Spares. End result: the sample matches and a partial report is created.
+Strictly audits the first `DATA_VALIDATION_LIMIT` accepted Spares; the current configured value is 30. End result: the sample matches and a partial report is created.
 
 ### Stores validation
 
@@ -359,7 +405,19 @@ A loop creates four complete tests, one per store type. End result: every accept
 
 #### `tests/data-validation/stores/stores-validation-audit-partially.spec.ts`
 
-A loop creates four tests for the first 10 accepted records per store type. End result: each sample matches and four partial reports are created.
+A loop creates four tests for the first `DATA_VALIDATION_LIMIT` accepted records per store type; the current configured value is 30. End result: each sample matches and four partial reports are created.
+
+### Location validation
+
+#### `tests/data-validation/location/location-validation-audit.spec.ts`
+
+Validates Location workbook data against observed application values and produces the shared validation and audit evidence.
+
+### Reporting standards
+
+#### `tests/reporting/reporting-standards.spec.ts`
+
+Checks shared reporting behavior without running the normal Sail E2E workflows. Run it with `npm run test:reporting`.
 
 ### Work Orders
 
@@ -431,6 +489,28 @@ This is the same attachment contract already used by the Data Validation scenari
 
 Bulk Import scenarios also place meaningful evidence in this existing report: validation-error screenshots are shown with their matching validation-error section, while rejection, import-complete, partial-import confirmation, import-summary, and final-validation screenshots appear as evidence for the same test result. The report layout and columns are unchanged.
 
+## Timeouts and long-running workflows
+
+The default configuration allows 60 seconds per test, 15 seconds per assertion or action, and 30 seconds per navigation. Some bulk-import and complete data-validation helpers currently call `test.setTimeout(0)`, and several bulk-import visibility assertions use `timeout: 0`.
+
+In Playwright, zero removes the deadline. Large imports can legitimately require longer finite limits, but if an expected button, confirmation, progress indicator, or completion state never appears, these workflows can wait indefinitely during local execution. The GitHub Actions job has a 60-minute job limit, but that terminates the whole job rather than producing a controlled Playwright scenario timeout.
+
+Until finite test deadlines and operation-specific waits are implemented, monitor complete bulk-import and data-validation runs, prefer partial validation when it meets the purpose, and do not assume that a test is making progress only because it has not failed.
+
+## CI status and current limitations
+
+The current `.github/workflows/playwright.yml` workflow:
+
+- Runs on Ubuntu for pushes and pull requests to `main` or `master`.
+- Uses Node.js LTS, `npm ci`, and `npx playwright install --with-deps`.
+- Calls `npx playwright test` directly instead of the project's `npm test` wrapper.
+- Has a 60-minute total job timeout.
+- Does not set `HEADLESS=true`, while `playwright.config.ts` defaults to headed execution. This is an unresolved CI risk.
+- Uploads `playwright-report/`, while the configured HTML reporter writes to `reports/validation/playwright-html/`. The artifact path is not aligned with the current output.
+- Does not show how required credentials and environment-specific test data are supplied.
+
+These are existing limitations, not completed fixes.
+
 ### Adding a Bulk Import scenario
 
 Use `runBulkDataImportFolderScenario` for a standard module spec. Inputs are resolved only from `test-data/bulk-import/<Module>/`; the resolver does not fall back to another folder and does not depend on filenames or directory order. Each existing file is submitted to the application, then the shared runner reads the actual upload-validation response.
@@ -465,39 +545,15 @@ The maximum upload size is defined once as `BULK_IMPORT_MAX_UPLOAD_SIZE_BYTES` i
 
 Do not put credentials in tests or commit `.env`.
 
-## Known review items
+## Known unresolved items
 
-These were not changed because they need data, environment, or team decisions.
-
-| Item                                                                  | Classification               | Recommendation                                                                 | Reason                                                                                 |
-| --------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| Missing `test-data/bulk-import/file-size-validation/`                 | REVIEW MANUALLY              | Add a supported file over 20 MB                                                | Required by the file-size spec                                                         |
-| `test-data/bulk-import/Playwright_UI_Automation_Framework_Guide.docx` | KEEP IF INTENTIONAL          | Used by the dedicated invalid-file-type spec                                   | The file is submitted to the application before its validation response is evaluated   |
-| Hard-coded `PMS Test 3`                                               | REVIEW MANUALLY              | Use `config.vesselName` if not a business requirement                          | Conflicts with portable `.env` setup                                                   |
-| `DATA_VALIDATION_LIMIT = 10`                                          | KEEP                         | Keep unless configurability is needed                                          | One clear source for partial-audit size                                                |
-| 20 MB upload limit                                                    | REVIEW MANUALLY              | Keep the configured oversized fixture aligned with the application requirement | Acceptance/rejection is determined only from the application's post-upload UI response |
-| `components-expected-data.json`                                       | REVIEW MANUALLY              | Confirm whether it remains maintained                                          | No direct code reference was found                                                     |
-| `components-import-result.json`                                       | KEEP                         | Keep; tests may rewrite it                                                     | Used as persisted component import metadata                                            |
-| `docs/*.md`                                                           | KEEP                         | Keep as project/design history                                                 | Not runtime code, but contains useful knowledge                                        |
-| `.codex/agents/*.toml`                                                | KEEP                         | Keep if Codex test agents are used                                             | Tool configuration, not runtime code                                                   |
-| `reports/`                                                            | KEEP LOCALLY / DO NOT COMMIT | Keep ignored                                                                   | Generated evidence may be useful                                                       |
-| `test-results/`                                                       | KEEP LOCALLY / DO NOT COMMIT | Keep ignored                                                                   | Generated traces and failures                                                          |
-| CI uploads `playwright-report/`                                       | REVIEW MANUALLY              | Upload `reports/validation/playwright-html/` instead, or align config          | Current configured output is elsewhere                                                 |
-| CI browser mode                                                       | CONFIGURED                   | Set `HEADLESS=true` in CI                                                      | Local runs remain headed by default                                                    |
-| Commented logout in `baseFixture.ts`                                  | REVIEW MANUALLY              | Remove or restore after deciding lifecycle                                     | Old code does not run                                                                  |
-| `debug.log`                                                           | REMOVE                       | Removed and ignored                                                            | Generated Chromium GPU messages; no references                                         |
-| Unused `ExpectedStoreRecord` import                                   | REMOVE                       | Removed                                                                        | ESLint identified it as unused                                                         |
-
-No page object, helper, workbook, report, documentation, or configuration file was deleted merely because it was not imported. Existing generated reports were left in place.
-
-## Suggested organization
-
-The current top-level layout is understandable. A large refactor is not needed.
-
-1. Put the Word negative-test input in `test-data/bulk-import/invalid-file-type/` after confirming it is the intended file.
-2. Add or document how to obtain the oversized file for `file-size-validation/` if it is too large for source control.
-3. Optionally move shared scenario helpers to one `scenarios/` folder only if team members mistake them for specs. Playwright already ignores them because they are not `.spec.ts` files.
-4. Keep page objects flat under `pages/` at the current project size.
+- The file-size validation directory required by the current resolver is missing.
+- `.env.example` omits `VESSEL_B`, although `utils/config.ts` can request it.
+- Some scenarios still contain environment-specific vessel assumptions such as `PMS Test 3`.
+- Bulk-import and complete data-validation helpers contain unlimited timeouts.
+- CI does not explicitly enable headless mode.
+- The CI artifact path does not match the configured Playwright HTML output.
+- Complete E2E execution can modify application data; Components cleanup is separate, manual, and limited to authorized tracked identities.
 
 ## Verification
 
