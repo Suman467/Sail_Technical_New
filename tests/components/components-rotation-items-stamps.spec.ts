@@ -14,7 +14,7 @@ type Identity = { code: string; name: string; parentCode: string };
 type SavedRotation = { rotationalItem: string; stamp: string };
 const sourceSpec = 'components-rotation-items-stamps.spec.ts';
 const parentLabel = '8 Ship Common Systems';
-const mandatoryStampMessage = 'Stamp is mandatory when Rotational Item is Yes.';
+const mandatoryStampMessage = 'Select a stamp when Rotational Item is set to Yes.';
 const step = (title: string, expected: string, actual: string) => `${title}\nExpected: ${expected}\nActual: ${actual}`;
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /**
@@ -375,12 +375,41 @@ test.describe('Components CMP-109 to CMP-120 - Rotation Items and Stamps', () =>
     const pick: PlannedStep = { title: 'Choose an In Store stamp offered in the Stamp dropdown', expected: 'One stamp whose status is exactly In Store in the Rotation Item Master List should also be offered in the Stamp dropdown, matched by its unique Stamp No.' };
     const saved: PlannedStep = { title: 'Verify the In Store stamp was saved on the component', expected: 'After Save and refresh, the saved Stamp should contain the complete unique In Store stamp name and exactly one component should exist.' };
     const check: PlannedStep = { title: 'Verify the In Store stamp is installed and no longer offered', expected: 'The In Store stamp should be Installed on this component only, the previously installed stamp should be released (no longer Installed), and the new stamp should be absent from the Replace choices.' };
-    const plan = new ScenarioPlan([openStep(), editStep(), rotationalStep('Yes'), masterStep('before fitting'), pick, selectStampStep('the In Store stamp'), saveStep(), reopenStep(), saved, masterStep('after fitting'), replacementStep(), check]);
+    const prepare: PlannedStep = {
+      title: 'Change one Spare stamp to In Store in the Rotation Item Master List',
+      expected: `When Vessel ${vessel} has no In Store stamp, one existing Spare stamp should be edited to Status In Store, saved, and shown as In Store in the reloaded Rotation Item Master List.`,
+    };
+    const plan = new ScenarioPlan([masterStep('before fitting'), prepare, openStep(), editStep(), rotationalStep('Yes'), pick, selectStampStep('the In Store stamp'), saveStep(), reopenStep(), saved, masterStep('after fitting'), replacementStep(), check]);
     await plan.run(async () => {
+      let before = await readMaster(plan, 'before fitting', (rows) => `In Store stamps: ${rows.filter((row) => row.status === 'In Store').map((row) => row.stamp).join(', ') || 'none'}; Spare stamps: ${rows.filter((row) => row.status === 'Spare').map((row) => row.stamp).join(', ') || 'none'}.`);
+      if (before.some((row) => row.status === 'In Store')) {
+        plan.begin(prepare.title);
+      } else {
+        // No In Store stamp exists: an existing Spare stamp (not installed on any
+        // component) is moved to In Store. The last Spare is used so the earlier
+        // Spare stamps stay available for the Spare scenarios.
+        const spare = before.filter((row) => row.status === 'Spare').at(-1);
+        plan.begin(prepare.title);
+        before = await componentActionStep(prepare.title, prepare.expected, async () => {
+          if (!spare) throw new Error(`Missing prerequisite: Vessel ${vessel} has no In Store stamp and no Spare stamp that could be moved to In Store`);
+          const masterTab = await context.newPage();
+          try {
+            const master = new RotationItemMasterPage(masterTab);
+            await master.openForVessel(vessel);
+            const httpStatus = await master.changeStampStatus(spare.stamp, 'In Store');
+            await master.openForVessel(vessel);
+            const rows = await master.readStamps();
+            expect(statusOf(rows, spare.stamp)?.status, `${spare.stamp} should show In Store after the reload`).toBe('In Store');
+            await test.info().attach(`${COMPONENT_VALIDATION_SCREENSHOT_PREFIX}${prepare.title}`, { body: await masterTab.screenshot({ fullPage: true }), contentType: 'image/png' });
+            return Object.assign(rows, { httpStatus });
+          } finally {
+            await masterTab.close();
+          }
+        }, (rows) => `No stamp was In Store, so Spare stamp ${spare!.stamp} was edited to Status In Store; Save returned HTTP ${rows.httpStatus} and the reloaded master list shows ${describeStatus(rows, spare!.stamp)}.`);
+      }
       const previous = await refreshAndOpen(plan);
       const form = await openEdit(plan);
       await setRotational(plan, form, 'Yes');
-      const before = await readMaster(plan, 'before fitting', (rows) => `In Store stamps: ${rows.filter((row) => row.status === 'In Store').map((row) => row.stamp).join(', ') || 'none'}.`);
       const candidate = await checkStep(plan, pick, async () => {
         // Dropdown labels combine number and name ("Test Stamp_003 — Stamp -3");
         // the option value is the unique Stamp No., so match on that only.
@@ -530,11 +559,12 @@ test.describe('Components CMP-109 to CMP-120 - Rotation Items and Stamps', () =>
 
   test('CMP-115 - Reject Rotational Item Yes without Stamp', componentScenario(`Saving Rotational Item Yes without a stamp should be rejected with "${mandatoryStampMessage}" and the saved component should stay unchanged.`), async () => {
     const clear: PlannedStep = { title: 'Leave Stamp unselected', expected: 'The Stamp dropdown should show no selected stamp.' };
-    const submit: PlannedStep = { title: 'Click Save and capture the application response', expected: `Save should be rejected and the application should display "${mandatoryStampMessage}".` };
+    const submit: PlannedStep = { title: 'Click Save and capture the application response', expected: 'Clicking Save with Rotational Item Yes and no Stamp should produce an application response or message, which is recorded for the rejection and message checks.' };
     const rejected: PlannedStep = { title: 'Verify Save was rejected without saving', expected: 'Save should not succeed and the Edit form should stay open with the validation message.' };
     const persisted: PlannedStep = { title: `Reopen ${common.code} and verify the saved values are unchanged`, expected: 'After the rejected Save, Rotational Item and Stamp should be the same as before the attempt.' };
-    const message: PlannedStep = { title: 'Verify the mandatory-stamp message', expected: `Save should be rejected with the exact message "${mandatoryStampMessage}" and the saved component should stay unchanged.` };
-    const plan = new ScenarioPlan([openStep(), editStep(), rotationalStep('Yes'), clear, submit, rejected, closeStep(), persisted, message]);
+    const message: PlannedStep = { title: 'Verify the mandatory-stamp message', expected: `The rejected Save should display the exact message "${mandatoryStampMessage}".` };
+    const check: PlannedStep = { title: 'Verify Rotational Item Yes without a Stamp was rejected', expected: `Save should be rejected with "${mandatoryStampMessage}", no successful save should occur, and the saved component should stay unchanged.` };
+    const plan = new ScenarioPlan([openStep(), editStep(), rotationalStep('Yes'), clear, submit, rejected, closeStep(), persisted, message, check]);
     await plan.run(async () => {
       const before = await refreshAndOpen(plan);
       const form = await openEdit(plan);
@@ -544,7 +574,7 @@ test.describe('Components CMP-109 to CMP-120 - Rotation Items and Stamps', () =>
         return form.readRotationItemState();
       }, (state) => `The Stamp dropdown showed "${state.stamp}"; no stamp was selected.`);
       plan.begin(submit.title);
-      const outcome = await form.submitForValidation({ feedbackPattern: /Stamp is mandatory when Rotational Item is Yes/i, expected: submit.expected });
+      const outcome = await form.submitForValidation({ feedbackPattern: new RegExp(escapeRegExp(mandatoryStampMessage.replace(/\.$/, '')), 'i'), expected: submit.expected });
       await checkStep(plan, rejected, async () => {
         expect(outcome.succeeded, 'Save without a stamp should be rejected').toBe(false);
         expect(outcome.formRemainedOpen, 'The Edit form should stay open after the rejected Save').toBe(true);
@@ -557,13 +587,19 @@ test.describe('Components CMP-109 to CMP-120 - Rotation Items and Stamps', () =>
         expect(reopened, 'Rotational Item and Stamp should be unchanged').toEqual(before);
         return reopened;
       }, (reopened) => `Before the attempt the component showed Rotational Item "${before.rotationalItem}" and Stamp "${shown(before.stamp)}"; after reopen it showed "${reopened.rotationalItem}" and "${shown(reopened.stamp)}".`);
-      await verify(plan, message, async () => {
-        // The notification also shows a "Validation Error" heading; the exact
-        // requirement applies to the message element itself.
-        const messages = outcome.feedback.split(' | ').map((text) => text.trim());
+      // The notification also shows a "Component Save Failed" title; the exact
+      // requirement applies to the message element itself.
+      const messages = outcome.feedback.split(' | ').map((text) => text.trim());
+      await checkStep(plan, message, async () => {
         expect(messages, `The application should display "${mandatoryStampMessage}"`).toContain(mandatoryStampMessage);
         return messages;
-      }, (messages) => `Save was rejected with "${messages.join(' | ')}"; the component still showed Rotational Item "${after.rotationalItem}" and Stamp "${shown(after.stamp)}".`);
+      }, (shownMessages) => `The rejected Save displayed "${shownMessages.join(' | ')}", which includes the exact message "${mandatoryStampMessage}".`);
+      await verify(plan, check, async () => {
+        expect(outcome.succeeded, 'Save without a stamp should be rejected').toBe(false);
+        expect(after, 'Rotational Item and Stamp should be unchanged').toEqual(before);
+        expect(messages).toContain(mandatoryStampMessage);
+        return messages;
+      }, () => `Save was rejected ${outcome.status ? `with HTTP ${outcome.status}` : 'before any save request was sent'} with "${mandatoryStampMessage}"; the component still showed Rotational Item "${after.rotationalItem}" and Stamp "${shown(after.stamp)}".`);
     });
   });
 

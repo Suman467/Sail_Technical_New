@@ -36,14 +36,44 @@ test.describe('CMP-165 to CMP-166 - Fleet Component Information', () => {
 
   const label = () => `${selected!.code} (${selected!.name})`;
 
+  /** Expands Section B, waits for its Fleet fields, and positions the details-panel scroller for evidence. */
+  const revealFleetSection = async (): Promise<void> => {
+    const detailsPanel = page.getByTestId('B7');
+    await expect(detailsPanel.getByTestId('B7.1'), 'The selected Component details should finish loading').toBeVisible();
+    const heading = detailsPanel.getByText(sectionB, { exact: true }).filter({ visible: true }).last();
+    await expect(heading, 'Section B - Fleet Component Information should be displayed').toBeVisible({ timeout: 10_000 });
+    const fields = ['Fleet Equipment Code', 'Fleet Component Name', 'Model Code', 'Vessel Name']
+      .map((field) => detailsPanel.getByText(field, { exact: true }).filter({ visible: true }).last());
+    if (!(await fields[0].isVisible().catch(() => false))) await heading.click();
+    for (const field of fields) await expect(field, 'Section B should finish loading all Fleet fields').toBeVisible({ timeout: 10_000 });
+    await heading.evaluate((node) => {
+      let parent = node.parentElement;
+      while (parent) {
+        const style = getComputedStyle(parent);
+        if (/(auto|scroll)/.test(style.overflowY) && parent.scrollHeight > parent.clientHeight) {
+          const offset = node.getBoundingClientRect().top - parent.getBoundingClientRect().top + parent.scrollTop;
+          parent.scrollTo({ top: Math.max(0, offset - 16), behavior: 'auto' });
+          return;
+        }
+        parent = parent.parentElement;
+      }
+      node.scrollIntoView({ block: 'start', behavior: 'auto' });
+    });
+    await heading.scrollIntoViewIfNeeded();
+    await expect(heading, 'Section B heading should remain visible for screenshot evidence').toBeInViewport();
+  };
+
   const readFleetDetails = async (): Promise<FleetDetails> => {
+    await revealFleetSection();
     const read = (fieldLabel: string) => components.readSelectedComponentDetail({ section: sectionB, label: fieldLabel }).then(normalizeExpectedText);
-    return {
+    const details = {
       fleetCode: await read('Fleet Equipment Code'),
       fleetName: await read('Fleet Component Name'),
       vesselName: await read('Vessel Name'),
       modelCode: await read('Model Code'),
     };
+    await revealFleetSection();
+    return details;
   };
 
   const readFleetForm = async (form: ComponentFormPage): Promise<FleetEdit> => ({
@@ -58,6 +88,7 @@ test.describe('CMP-165 to CMP-166 - Fleet Component Information', () => {
     if (identity.code !== selected!.code || identity.name !== selected!.name || identity.vesselName !== vessel) {
       throw new Error(`Observed Application Result: Component Details showed Code ${identity.code}, Name ${identity.name}, Vessel ${identity.vesselName} instead of the selected Component ${label()} in Vessel ${vessel}.`);
     }
+    await revealFleetSection();
     return identity;
   };
 

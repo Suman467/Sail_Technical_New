@@ -581,14 +581,38 @@ export class ComponentsPage extends BasePage {
   }
 
   /** Clears any previous tree filter so a new vessel starts from an unfiltered view. */
+  /** Returns the text currently held by the register search box. */
+  public async componentSearchText(): Promise<string> {
+    return this.componentSearchField.inputValue();
+  }
+
+  /**
+   * Empties only the search text. The register's Clear button is not used: it also resets the
+   * Critical Item filter to All Items, which would silently undo a filter a scenario applied.
+   */
   public async clearComponentSearch(): Promise<void> {
     if (await this.componentSearchField.inputValue()) {
-      const clearButton = this.page.getByRole('button', { name: 'Clear', exact: true });
-      if (await clearButton.isVisible().catch(() => false)) await clearButton.click();
-      else await this.componentSearchField.clear();
-      await expect(this.componentSearchField).toHaveValue('');
+      await this.enterSearchText('');
       await this.waitForTreeToSettle('The Components tree should restore after clearing search');
     }
+  }
+
+  /**
+   * Types into the register search and waits until the text is still there after a short settle.
+   * After a reload the page re-applies its saved search once the tree data has loaded, which can
+   * overwrite text typed just before; the text is then entered again, a bounded number of times.
+   */
+  private async enterSearchText(text: string): Promise<void> {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      await this.componentSearchField.fill(text);
+      const held = await expect.poll(async () => {
+        if (await this.componentSearchField.inputValue() !== text) return false;
+        await this.page.waitForTimeout(400);
+        return await this.componentSearchField.inputValue() === text;
+      }, { timeout: 5_000 }).toBe(true).then(() => true, () => false);
+      if (held) return;
+    }
+    await expect(this.componentSearchField, `The Components search should hold "${text}"`).toHaveValue(text);
   }
 
   /** Finds and selects another vessel-owned component without hardcoded fixture data. */
@@ -728,8 +752,7 @@ export class ComponentsPage extends BasePage {
     const exactCodePattern = new RegExp(`^${escapedCode}(?:\\s|$)`);
 
     await this.clearComponentSearch();
-    await this.componentSearchField.fill(normalizedCode);
-    await expect(this.componentSearchField).toHaveValue(normalizedCode);
+    await this.enterSearchText(normalizedCode);
     await this.waitForTreeToSettle(`The Components search for ${normalizedCode} should settle`);
     if (await this.selectedComponentIsVisible(normalizedCode)) {
       const selectedIdentity = await this.readSelectedComponentIdentity();
@@ -808,8 +831,7 @@ export class ComponentsPage extends BasePage {
       // replace the search text with that ancestor's code. Restore the exact
       // target before continuing down the already-expanded filtered branch.
       if (await this.componentSearchField.inputValue() !== normalizedCode) {
-        await this.componentSearchField.fill(normalizedCode);
-        await expect(this.componentSearchField).toHaveValue(normalizedCode);
+        await this.enterSearchText(normalizedCode);
         await this.waitForTreeToSettle(`The Components search for ${normalizedCode} should remain active`);
       }
     }
@@ -2247,7 +2269,7 @@ export class ComponentsPage extends BasePage {
   ): Promise<string> {
     await this.clearComponentSearch();
     await this.expectVesselSelected(vesselName);
-    await this.componentSearchField.fill(code);
+    await this.enterSearchText(code);
 
     const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const matchingRow = this.componentRows.filter({
@@ -2294,8 +2316,7 @@ export class ComponentsPage extends BasePage {
     vesselName: string,
   ): Promise<ComponentAbsenceSearchResult> {
     await this.expectVesselSelected(vesselName);
-    await this.componentSearchField.fill(searchTerm);
-    await expect(this.componentSearchField).toHaveValue(searchTerm);
+    await this.enterSearchText(searchTerm);
     await expect(
       this.componentCountLabel.locator('..').locator('[aria-busy="true"]'),
       `Search ${searchTerm} should finish loading`,
@@ -2407,8 +2428,7 @@ export class ComponentsPage extends BasePage {
 
   /** Enters a tree search term and returns the rendered hierarchy after loading settles. */
   public async searchTree(term: string): Promise<ComponentTreeRow[]> {
-    await this.componentSearchField.fill(term);
-    await expect(this.componentSearchField).toHaveValue(term);
+    await this.enterSearchText(term);
     await expect(this.page.getByTestId('B6').locator('[aria-busy="true"]'), `Search ${term} should settle`).toHaveCount(0);
     return this.readExpandedTreeRows();
   }
@@ -2483,8 +2503,7 @@ export class ComponentsPage extends BasePage {
 
   public async exactComponentCount(code: string, maxExpansions = 100): Promise<number> {
     await this.clearComponentSearch();
-    await this.componentSearchField.fill(code);
-    await expect(this.componentSearchField).toHaveValue(code);
+    await this.enterSearchText(code);
     await this.waitForTreeToSettle(`The Components search for ${code} should settle`);
     const escaped = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const exactRows = this.componentRows.filter({ hasText: new RegExp(`^${escaped}(?:\\s|$)`) });
@@ -2545,8 +2564,7 @@ export class ComponentsPage extends BasePage {
     for (const term of ['AT0', 'AUTO-CMP', 'Disposable', 'Test CMP']) {
       await this.clearComponentSearch();
       const unfilteredTree = (await this.componentRows.allInnerTexts()).join('\n');
-      await this.componentSearchField.fill(term);
-      await expect(this.componentSearchField).toHaveValue(term);
+      await this.enterSearchText(term);
       await expect.poll(
         async () => {
           if (await this.page.getByTestId('B6').locator('[aria-busy="true"]').count()) return unfilteredTree;

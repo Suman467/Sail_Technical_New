@@ -39,6 +39,29 @@ export class RotationItemMasterPage extends BasePage {
     }));
   }
 
+  /**
+   * Changes the Status of one existing stamp through its Edit dialog and returns
+   * the HTTP status of the save. Stamps are never created or deleted here.
+   */
+  public async changeStampStatus(stamp: string, status: 'Spare' | 'In Store'): Promise<number> {
+    await this.page.getByTestId(`button-edit-rotation-item-${stamp}`).click();
+    const dialog = this.page.getByRole('dialog').filter({ hasText: 'Edit Rotation Item' });
+    await expect(dialog, `The Edit Rotation Item dialog for ${stamp} should open`).toBeVisible();
+    const statusSelect = dialog.getByTestId('select-edit-status');
+    await statusSelect.click();
+    await this.page.getByRole('option', { name: status, exact: true }).click();
+    await expect(statusSelect, `Status should show ${status} before Save`).toContainText(status);
+    const saved = this.page.waitForResponse(
+      (response) => !['GET', 'OPTIONS'].includes(response.request().method()) && /rotation/i.test(response.url()),
+      { timeout: 15_000 },
+    );
+    await dialog.getByTestId('button-save-edit-rotation-item').click();
+    const response = await saved;
+    expect(response.ok(), `Saving Status ${status} for ${stamp} should succeed (HTTP ${response.status()})`).toBe(true);
+    await expect(dialog, 'The Edit Rotation Item dialog should close after Save').toBeHidden();
+    return response.status();
+  }
+
   private rows(): Locator {
     return this.page.locator('[data-testid^="row-rotation-item-"]');
   }

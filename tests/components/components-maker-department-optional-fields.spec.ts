@@ -409,7 +409,7 @@ test.describe('Components maker, department, and optional information', () => {
   });
 
   test('CMP-070 - Installation and Commissioned dates persist', componentScenario('Valid Installation and Commissioned dates should reopen on the same calendar dates without timezone shift or formatting corruption.'), async () => {
-    const dates = { 'Installation Date': '2026-09-10', 'Commissioned Date': '2026-09-11' };
+    const dates = { 'Installation Date': '10-09-2026', 'Commissioned Date': '11-09-2026' };
     await componentValidationStep(page, step(`Save dates on existing component ${recordedComponent.code}`, `Installation Date ${dates['Installation Date']} and Commissioned Date ${dates['Commissioned Date']} should remain exact after Save, one refresh, and reopen.`, `${recordedComponent.code} reopened with both entered dates unchanged.`), async () => {
       let form = await openRecordedComponent();
       const originalInstallation = await form.controlValue('Installation Date', 'input-installation-date');
@@ -461,7 +461,7 @@ test.describe('Components maker, department, and optional information', () => {
   });
 
   test('CMP-073 - Clear saved optional information', componentScenario('Cleared optional values should remain blank after save, refresh, and reopen.'), async () => {
-    const initial = { Model: 'CMP073 model', 'Serial No.': 'CMP073 serial', 'Drawing No': 'CMP073 drawing', Location: 'CMP073 location', Rating: '73 kW', 'Notes / Technical Information': 'CMP073 notes', 'Installation Date': '2026-03-10', 'Commissioned Date': '2026-03-11' };
+    const initial = { Model: 'CMP073 model', 'Serial No.': 'CMP073 serial', 'Drawing No': 'CMP073 drawing', Location: 'CMP073 location', Rating: '73 kW', 'Notes / Technical Information': 'CMP073 notes', 'Installation Date': '02-10-2026', 'Commissioned Date': '03-11-2026' };
     await componentValidationStep(page, step(
       `Populate and clear optional information on shared component ${recordedComponent.code}`,
       'The eight scenario-specific optional fields should first persist with their test values, then remain blank after they are cleared, saved, refreshed once, and reopened; unrelated master data should remain untouched.',

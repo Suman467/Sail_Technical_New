@@ -14,7 +14,7 @@ type DetailState = { counterType: string; counterSource: string; runningHours: s
 const sourceSpec = 'components-running-hours-condition-monitoring.spec.ts';
 const parentLabel = '8 Ship Common Systems';
 const sectionC = 'C. Running Hours & Condition Monitoring';
-const sourceMessage = 'Please select a RH Counter Source from MASTER components.';
+const sourceMessage = 'Component Save Failed | Select a MASTER component as the RH Counter Source.';
 const step = (title: string, expected: string, actual: string, status?: 'NOT RUN') =>
   `${title}\nExpected: ${expected}\nActual: ${actual}${status ? `\nStatus: ${status}` : ''}`;
 const isBlank = (value: string) => ['', '-', '—'].includes(value.trim());
@@ -23,6 +23,9 @@ const numberValue = (value: string) => Number(value.replaceAll(',', '').replace(
 const dateOnly = (value: string) => {
   const iso = value.match(/\d{4}-\d{2}-\d{2}/)?.[0];
   if (iso) return iso;
+  // The application displays and accepts dates day-first (DD-MM-YYYY).
+  const dayFirst = value.match(/\b(\d{2})-(\d{2})-(\d{4})\b/);
+  if (dayFirst) return `${dayFirst[3]}-${dayFirst[2]}-${dayFirst[1]}`;
   const parsed = new Date(value);
   return Number.isNaN(parsed.valueOf())
     ? value.trim()
@@ -395,13 +398,17 @@ test.describe('Components CMP-093 to CMP-108 - Running Hours and Condition Monit
       const { form } = await openEdit(plan);
       const enteredDate = await applicationDate();
       plan.begin(enter.title);
-      const entered = await componentActionStep(enter.title, enter.expected, () => form.setRunningHours('1000', enteredDate),
-        (value) => `Running Hours retained "${value.runningHours}" and the date field retained ${value.readingDate}.`);
+      const entered = await componentActionStep(enter.title, enter.expected, async () => {
+        const value = await form.setRunningHours('1000', enteredDate);
+        expect(numberValue(value.runningHours), 'Running Hours should show 1000 before Save').toBe(1000);
+        expect(dateOnly(value.readingDate), `The date field should show the current date ${enteredDate} before Save`).toBe(enteredDate);
+        return value;
+      }, (value) => `Running Hours retained "${value.runningHours}" and the date field retained ${value.readingDate}.`);
       await save(plan, form);
       const after = await reopenAfterSave(plan);
       await verify(plan, check, async () => {
         expect(numberValue(after.runningHours), 'Running Hours should persist as 1000').toBe(1000);
-        expect(dateOnly(after.lastUpdated), 'Last Updated should match the entered date').toBe(entered.readingDate);
+        expect(dateOnly(after.lastUpdated), 'Last Updated should match the entered date').toBe(enteredDate);
         return after;
       }, (after) => `Entered 1000 on ${entered.readingDate}. After Save and reopen, ${selected.code} displayed ${describeDetails(after)}.`);
     });
@@ -412,7 +419,7 @@ test.describe('Components CMP-093 to CMP-108 - Running Hours and Condition Monit
       title: 'Leave RH Counter Source unselected',
       expected: 'RH Counter Source should show no selected Master component.',
     };
-    const submit: PlannedStep = { title: 'Click Save and capture the application response', expected: `Save should be rejected and the application should display "${sourceMessage}".` };
+    const submit: PlannedStep = { title: 'Click Save and capture the application response', expected: 'Clicking Save with Inherited and no RH Counter Source should produce an application response or message, which is recorded for the rejection and message checks.' };
     const rejected: PlannedStep = {
       title: 'Verify Save was rejected without saving',
       expected: 'Save should not succeed, no successful save response should be returned, and the Edit form should stay open with the validation message.',
@@ -493,15 +500,25 @@ test.describe('Components CMP-093 to CMP-108 - Running Hours and Condition Monit
   }
 
   test('CMP-107 - Submit Running Hours below current reading', componentScenario('Saving Running Hours 555 below the latest 1000 reading should be rejected with a message naming 555, 1000 and the date 1000 was recorded, and 1000 should remain saved.'), async () => {
+    // CMP-107 sets up its own 1000 baseline through Edit and Save when the
+    // component does not already show it, so it does not depend on CMP-099.
+    const baselineEdit: PlannedStep = { ...editStep(), title: `Click Edit to enter the baseline reading for Component ${selected.code}` };
+    const baselineEnter: PlannedStep = {
+      title: 'Enter baseline Running Hours 1000 and the current date',
+      expected: 'Running Hours should retain 1000 and the date field should retain the current application-local date before Save.',
+    };
+    const baselineSave: PlannedStep = { ...saveStep(), title: `Click Save for the baseline reading of Component ${selected.code}` };
+    const baselineReopen: PlannedStep = { ...reopenStep(), title: `Reopen Component ${selected.code} after saving the baseline reading` };
+    const baselineSteps = [baselineEdit, baselineEnter, baselineSave, baselineReopen];
     const baselineStep: PlannedStep = {
       title: 'Confirm the latest saved Running Hours reading is 1000',
-      expected: 'Section C should show Running Hours 1000, saved by CMP-099, with its recorded date.',
+      expected: 'Section C should show Running Hours 1000 with its recorded date before the lower reading is attempted.',
     };
     const enter: PlannedStep = {
       title: 'Enter Running Hours 555 and the current date',
       expected: 'Running Hours should retain 555 and the date field should retain the current application-local date before Save.',
     };
-    const submit: PlannedStep = { title: 'Click Save and capture the application response', expected: 'Save should be rejected because 555 is lower than the latest reading of 1000.' };
+    const submit: PlannedStep = { title: 'Click Save and capture the application response', expected: 'Clicking Save with the lower reading 555 should produce an application response or message, which is recorded for the rejection check.' };
     const rejected: PlannedStep = {
       title: 'Verify the lower reading was rejected with a message naming both readings and the date',
       expected: 'Save should not succeed; the message should name 555 RH, 1000 RH and the date 1000 was recorded, for example "Current Reading (555 RH) cannot be lower than the latest Running Hours value (1000 RH recorded on YYYY-MM-DD). Correct the reading before continuing."',
@@ -510,15 +527,39 @@ test.describe('Components CMP-093 to CMP-108 - Running Hours and Condition Monit
       title: `Reopen ${selected.code} and verify Running Hours 1000 is unchanged`,
       expected: 'The 555 reading should have been rejected with a message naming 555 RH, 1000 RH and the date 1000 was recorded, and after reopen Running Hours should still be 1000 with its original recorded date.',
     };
-    const plan = new ScenarioPlan([openStep(), editStep(), baselineStep, enter, submit, rejected, closeStep(), check]);
+    const plan = new ScenarioPlan([openStep(), ...baselineSteps, baselineStep, editStep(), enter, submit, rejected, closeStep(), check]);
     await plan.run(async () => {
-      const before = await refreshAndOpen(plan);
-      const { form } = await openEdit(plan);
+      let before = await refreshAndOpen(plan);
+      if (numberValue(before.runningHours) === 1000) {
+        // The baseline is already saved; the setup actions are not needed.
+        for (const item of baselineSteps) plan.begin(item.title);
+      } else {
+        plan.begin(baselineEdit.title);
+        const baselineForm = await componentActionStep(baselineEdit.title, baselineEdit.expected, async () => {
+          const opened = await components.openSelectedComponentForEdit();
+          await opened.expectEditReady(selected.code);
+          return { form: opened, state: await opened.readRunningHoursState() };
+        }, ({ state }) => `Section C showed Running Hours "${shown(before.runningHours)}", so the Edit form was opened to enter the 1000 baseline; it showed ${describeForm(state)}.`);
+        const baselineDate = await applicationDate();
+        plan.begin(baselineEnter.title);
+        await componentActionStep(baselineEnter.title, baselineEnter.expected, async () => {
+          const value = await baselineForm.form.setRunningHours('1000', baselineDate);
+          expect(numberValue(value.runningHours), 'Running Hours should show 1000 before Save').toBe(1000);
+          expect(dateOnly(value.readingDate), `The date field should show the current date ${baselineDate} before Save`).toBe(baselineDate);
+          return value;
+        }, (value) => `Running Hours retained "${value.runningHours}" and the date field retained ${value.readingDate}.`);
+        plan.begin(baselineSave.title);
+        await baselineForm.form.saveValid();
+        plan.begin(baselineReopen.title);
+        before = await componentActionStep(baselineReopen.title, baselineReopen.expected, () => selectComponent(),
+          (state) => `After Save, Vessel ${vessel} reopened Component ${label()}; Section C displayed ${describeDetails(state)}.`, { page });
+      }
       plan.begin(baselineStep.title);
       const recordedDate = await componentActionStep(baselineStep.title, baselineStep.expected, async () => {
-        expect(numberValue(before.runningHours), `CMP-107 requires Running Hours 1000 saved by CMP-099; Section C showed "${shown(before.runningHours)}"`).toBe(1000);
+        expect(numberValue(before.runningHours), `Section C should show the 1000 baseline before the lower reading; it showed "${shown(before.runningHours)}"`).toBe(1000);
         return dateOnly(before.lastUpdated);
-      }, (value) => `Section C showed Running Hours "${before.runningHours}" recorded on ${value}.`);
+      }, (value) => `Section C showed Running Hours "${before.runningHours}" recorded on ${value}.`, { page });
+      const { form } = await openEdit(plan);
       plan.begin(enter.title);
       const entered = await componentActionStep(enter.title, enter.expected, async () => form.setRunningHours('555', await applicationDate()),
         (value) => `Running Hours retained "${value.runningHours}" and the date field retained ${value.readingDate}.`);

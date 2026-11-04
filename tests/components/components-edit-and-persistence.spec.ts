@@ -3,7 +3,7 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
 import { ComponentFormPage } from '../../pages/ComponentFormPage';
 import { ComponentsPage } from '../../pages/ComponentsPage';
 import { LoginPage } from '../../pages/LoginPage';
-import { attachFailureScreenshot, componentScenario, componentValidationStep } from '../../utils/componentValidationEvidence';
+import { attachFailureScreenshot, componentActionStep, componentScenario, componentValidationStep } from '../../utils/componentValidationEvidence';
 import { readTrackedComponents, trackCreatedComponent, updateTrackedComponentCleanup } from '../../utils/componentCreationTracker';
 import { openPrimaryComponentsSession, restoreComponentsPage } from '../../utils/componentsSession';
 import { config } from '../../utils/config';
@@ -53,19 +53,20 @@ test.describe('Components CMP-082 to CMP-092 - Edit and persistence', () => {
   const createFreshScenarioComponent = async (testCaseId: 'CMP-090' | 'CMP-091'): Promise<CreatedComponentIdentity> => {
     const suffix = `${Date.now().toString(36)}${randomUUID().replace(/-/g, '').slice(0, 4)}`.toUpperCase();
     const created = { code: `AT${testCaseId.slice(4)}-${suffix}`.slice(0, 20), name: `${testCaseId} disposable ${suffix}` };
-    const hierarchy = await componentValidationStep(page, step(
+    // These setup actions are recorded as ordinary steps so the report shows each
+    // one with its observed result; only the scenario's final check is a validation step.
+    const hierarchy = await componentActionStep(
       `Identify an accessible parent for the new ${testCaseId} component`,
       `The application should expose the actual parent branch of automation Component ${selected.code} in Vessel ${vessel}.`,
-      `The application exposed an accessible parent branch for automation Component ${selected.code} without using Expand All.`,
-    ), () => components.discoverHierarchyFixture(selected.code), {
-      actual: ({ parent }) => `Component ${parent.code} (${parent.name}) was observed as the accessible parent of ${selected.code} in Vessel ${vessel}.`,
-    });
+      () => components.discoverHierarchyFixture(selected.code),
+      ({ parent }) => `Component ${parent.code} (${parent.name}) was observed as the accessible parent of ${selected.code} in Vessel ${vessel}.`,
+      { page },
+    );
     const parentCode = hierarchy.parent.code;
-    const submission = await componentValidationStep(page, step(
+    const submission = await componentActionStep(
       `Create fresh ${testCaseId} Component ${created.code} (${created.name})`,
       `One new automation-owned component should save under accessible Parent ${parentCode} and display successful application feedback.`,
-      `The application accepted Component ${created.code} under Parent ${parentCode}.`,
-    ), async () => {
+      async () => {
       const form = await components.openComponentForAdd();
       const required = {
         parentCode,
@@ -84,16 +85,16 @@ test.describe('Components CMP-082 to CMP-092 - Edit and persistence', () => {
       expect(outcome.uiMessage, `Creating ${created.code} should display success feedback`).toMatch(/success|created|saved|added/i);
       await trackCreatedComponent({ ...created, vessel, parentCode, sourceSpec: 'components-edit-and-persistence.spec.ts', testCaseId, runId: `${testCaseId.toLowerCase()}-${suffix}`, createdAt: new Date().toISOString() });
       return outcome;
-    }, {
-      actual: (outcome) => `Create returned HTTP ${outcome.status} with visible feedback "${outcome.uiMessage}"${outcome.responseMessage ? ` and response "${outcome.responseMessage}"` : ''} for ${created.code}.`,
-    });
+    },
+      (outcome) => `Create returned HTTP ${outcome.status} with visible feedback "${outcome.uiMessage}"${outcome.responseMessage ? ` and response "${outcome.responseMessage}"` : ''} for ${created.code}.`,
+      { page },
+    );
     expect(submission.status).toBeGreaterThanOrEqual(200);
 
-    await componentValidationStep(page, step(
+    await componentActionStep(
       `Refresh and verify fresh ${testCaseId} Component ${created.code}`,
       `After refresh, exact Code ${created.code}, Name ${created.name}, and Vessel ${vessel} should identify one editable component.`,
-      `After refresh, the exact component identity was located and its Edit form opened successfully.`,
-    ), async () => {
+      async () => {
       await page.reload({ waitUntil: 'domcontentloaded' });
       await components.expectToBeOnPage();
       await components.selectVessel(vessel);
@@ -103,9 +104,10 @@ test.describe('Components CMP-082 to CMP-092 - Edit and persistence', () => {
       await form.expectEditReady(created.code);
       await form.back();
       return identity;
-    }, {
-      actual: (identity) => `The refreshed register showed exact Component ${identity.code} (${identity.name}) in Vessel ${identity.vesselName}, and its Edit form hydrated successfully.`,
-    });
+    },
+      (identity) => `The refreshed register showed exact Component ${identity.code} (${identity.name}) in Vessel ${identity.vesselName}, and its Edit form hydrated successfully.`,
+      { page },
+    );
     return { ...created, parentCode };
   };
 
@@ -332,27 +334,43 @@ test.describe('Components CMP-082 to CMP-092 - Edit and persistence', () => {
     let deleted = false;
 
     try {
-      const staleForm = await componentValidationStep(page, step(
+      const staleForm = await componentActionStep(
         `User 1 opens ${disposable.code} and prepares an unsaved Model edit`,
         `The primary user should verify ${disposable.code} in Vessel ${vessel}, open Edit, enter a unique Model, and keep the form open without saving.`,
-        `User 1 opened the verified disposable component and kept its changed Model unsaved in the original Edit form.`,
-      ), async () => {
+        async () => {
         const form = await openEdit(disposable);
         const model = `Stale-${runToken}-${Date.now().toString(36).toUpperCase()}`;
         await form.fillOptional({ Model: model });
         return { form, model };
-      }, { actual: ({ model }) => `User 1 kept Edit open for exact Component ${disposable.code} (${disposable.name}) in Vessel ${vessel} with unsaved Model "${model}".` });
+      },
+        ({ model }) => `User 1 kept Edit open for exact Component ${disposable.code} (${disposable.name}) in Vessel ${vessel} with unsaved Model "${model}".`,
+        { page },
+      );
 
-      const componentsB = await getSecondaryComponents();
+      const signedInBefore = Boolean(secondaryComponents && secondaryPage && !secondaryPage.isClosed());
+      const componentsB = await componentActionStep(
+        'User 2 signs in and opens Components in a separate browser session',
+        `The second automation user ${config.automationUser2Username} should be signed in separately from User 1 and see the Components page.`,
+        () => getSecondaryComponents(),
+        () => signedInBefore
+          ? `User 2 (${config.automationUser2Username}) reused this worker's existing separate session; the Components page was open.`
+          : `User 2 (${config.automationUser2Username}) signed in once in a separate browser session and the Components page opened.`,
+      );
       const pageB = secondaryPage!;
-      const deletionFeedback = await componentValidationStep(pageB, step(
+      const deletionFeedback = await componentActionStep(
         `User 2 verifies and deletes disposable Component ${disposable.code}`,
         `The separately authenticated secondary user should verify exact Code, Name, and Vessel, delete only ${disposable.code}, then refresh and confirm it is absent.`,
-        `User 2 verified the exact disposable identity, completed the normal UI deletion, and confirmed the refreshed register contained no matching code.`,
-      ), async () => {
+        async () => {
         await componentsB.selectVessel(vessel);
         expect(await componentsB.searchAndSelectComponentByCode(disposable.code)).toEqual({ code: disposable.code, name: disposable.name, vesselName: vessel });
-        const feedback = await componentsB.deleteSelectedComponent(disposable.code);
+        const feedback = await componentsB.deleteSelectedComponent(disposable.code).catch(async (error: unknown) => {
+          // Keep the secondary user's own screen as evidence; the default failure
+          // screenshot shows only the primary user's page.
+          const actions = await pageB.getByTestId('B7').getByRole('button').filter({ visible: true }).allInnerTexts().catch(() => []);
+          test.info().annotations.push({ type: 'CMP-090 secondary user details actions', description: actions.map((text) => text.trim() || '(icon)').join(', ') || '(none visible)' });
+          await test.info().attach('CMP-090 secondary user page at deletion', { body: await pageB.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' });
+          throw error;
+        });
         expect(feedback).not.toBe('');
         await pageB.reload({ waitUntil: 'domcontentloaded' });
         await componentsB.expectToBeOnPage();
@@ -361,14 +379,17 @@ test.describe('Components CMP-082 to CMP-092 - Edit and persistence', () => {
         deleted = true;
         await updateTrackedComponentCleanup(disposable.code, vessel, 'deleted', feedback);
         return feedback;
-      }, { actual: (feedback) => `User 2 deleted ${disposable.code} (${disposable.name}) in Vessel ${vessel}; the application displayed "${feedback}", and refreshed exact search returned zero records.` });
+      },
+        (feedback) => `User 2 deleted ${disposable.code} (${disposable.name}) in Vessel ${vessel}; the application displayed "${feedback}", and refreshed exact search returned zero records.`,
+        { page: pageB },
+      );
 
       await componentValidationStep(page, step(
         `User 1 saves the stale Edit form for deleted Component ${disposable.code}`,
         `The original stale Save should be rejected with readable record-not-found feedback, and refresh should confirm ${disposable.code} remains deleted.`,
         `User 1's stale Save was rejected, and refreshed exact search confirmed the deleted component was not recreated.`,
       ), async () => {
-        const outcome = await staleForm.form.submitForValidation();
+        const outcome = await staleForm.form.submitForValidation({ expected: `User 1's Save of the stale Edit form for deleted Component ${disposable.code} should be rejected with readable record-not-found feedback.` });
         await Promise.all([
           test.info().attach('CMP-090 stale primary form evidence', { body: await page.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' }),
           test.info().attach('CMP-090 deletion evidence', { body: await pageB.screenshot({ fullPage: true, animations: 'disabled' }), contentType: 'image/png' }),

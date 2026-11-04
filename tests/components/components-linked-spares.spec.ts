@@ -1209,6 +1209,9 @@ test.describe('CMP-142 to CMP-148 - Linked Spares', () => {
     }, { actual: (message) => `Component ${visit.code} (${visit.identity.name}) in ${visit.identity.vesselName} displayed no spare rows and showed "${message}".` });
   });
 
+
+  /*
   test.skip('CMP-147 - Deferred spare scenario', componentScenario('CMP-147 remains intentionally deferred and is not executed.'), async () => {});
   test.skip('CMP-148 - Deferred spare scenario', componentScenario('CMP-148 remains intentionally deferred and is not executed.'), async () => {});
-});
+*/
+  });

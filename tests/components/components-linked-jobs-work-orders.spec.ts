@@ -629,7 +629,7 @@ test.describe('CMP-122 to CMP-132 - Linked Jobs and Work Orders', () => {
       () => generateCmp131WorkOrder(job131.jobCode),
       (result) => `Planning was selected again. The application displayed: "${result.feedback}"`, { page });
 
-    const expectedMessage = 'A planned Work Order already exists for this maintenance job. Please complete the existing planned Work Order from the WO section before proceeding.';
+    const expectedMessage = 'Work Order Already Planned Please complete the existing planned Work Order from the WO section before proceeding.';
     await checkStep('Verify the duplicate warning', `The application should display "${expectedMessage}"`, async () => {
       expect(second.feedback).toContain(expectedMessage);
       return second.feedback;

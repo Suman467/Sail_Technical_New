@@ -99,6 +99,19 @@ async function openComponentsWithState(browser: Browser, storageState: Authentic
   return { context, page };
 }
 
+/**
+ * The Components page saves its search text, Critical Item filter, selection and expanded rows
+ * per vessel in sessionStorage and re-applies them after a reload only once the tree data has
+ * loaded, which can be after the next search was typed. Forgetting the saved view before a
+ * reload or navigation makes the page start unfiltered.
+ */
+export async function forgetComponentsViewState(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const storage = globalThis.sessionStorage;
+    for (const key of Object.keys(storage)) if (key.startsWith('pms-components-view-state:')) storage.removeItem(key);
+  }).catch(() => undefined);
+}
+
 /** Restores a usable Components page after each test without another login. */
 export async function restoreComponentsPage(
   page: Page,

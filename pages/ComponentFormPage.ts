@@ -175,10 +175,23 @@ export class ComponentFormPage extends BasePage {
 
   public async fillRequired(data: { parentCode?: string; code?: string; name?: string; category?: string; department?: string; isParent?: 'Yes' | 'No'; isActive?: 'Yes' | 'No'; actorLabel?: string }): Promise<void> {
     const actor = data.actorLabel ? ` for ${data.actorLabel}` : '';
+    // Only the fields this call actually enters are reported; an empty value is entered as blank.
+    const value = (text: string) => (text.trim() ? `"${text}"` : '(blank)');
+    const entered = [
+      data.parentCode !== undefined && `Parent Component Code ${value(data.parentCode)}`,
+      data.code !== undefined && `Component Code ${value(data.code)}`,
+      data.name !== undefined && `Component Name ${value(data.name)}`,
+      data.category !== undefined && `Component Category ${data.category ? value(data.category) : '(not selected)'}`,
+      data.isParent !== undefined && `Is Parent ${data.isParent}`,
+      data.department !== undefined && `Equipment / System Department ${data.department ? value(data.department) : '(not selected)'}`,
+      data.isActive !== undefined && `Is Active ${data.isActive}`,
+    ].filter(Boolean).join(', ');
     await test.step(businessStep(
-      `Enter required Add Component values for ${data.code ?? 'the generated component'}${actor} in Vessel ${this.selectedVessel}`,
-      `${data.actorLabel ?? 'The user'} should populate the Add form with Code ${data.code ?? '<generated>'}, Name "${data.name ?? '<generated>'}", Parent ${data.parentCode ?? '<selected parent>'}, and the configured mandatory selections before Save.`,
-      `${data.actorLabel ?? 'The user'} populated the Add form with Code ${data.code ?? '<generated>'}, Name "${data.name ?? '<generated>'}", Parent ${data.parentCode ?? '<selected parent>'}, Category ${data.category || '<not selected>'}, Department ${data.department || '<not selected>'}, Is Parent ${data.isParent ?? '<unchanged>'}, and Is Active ${data.isActive ?? '<unchanged>'}.`,
+      data.code
+        ? `Enter required Add Component values for ${data.code}${actor} in Vessel ${this.selectedVessel}`
+        : `Enter ${entered} in the open Add Component form${actor} in Vessel ${this.selectedVessel}`,
+      `${data.actorLabel ?? 'The user'} should enter ${entered} in the Add form before Save.`,
+      `${data.actorLabel ?? 'The user'} entered ${entered} in the Add form.`,
     ), async () => {
     if (data.parentCode !== undefined) await this.parentCodeField.fill(data.parentCode);
     if (data.code !== undefined) await this.componentCodeField.fill(data.code);
@@ -322,13 +335,22 @@ export class ComponentFormPage extends BasePage {
         ? this.page.getByText(options.feedbackPattern).filter({ visible: true })
         : undefined;
       const feedback = scenarioFeedback ? defaultFeedback.or(scenarioFeedback) : defaultFeedback;
+      // The form's own pre-save checks block the request and show a
+      // "Component Save Failed" notification whose description is the
+      // application's reworded message, so that notification is Save feedback too.
+      const saveFailedTitle = this.page.getByText('Component Save Failed', { exact: true }).filter({ visible: true });
       // A scenario-specific message is awaited on its own: the form's standing
       // "Fill mandatory fields..." instruction would otherwise satisfy the wait.
-      await expect.poll(async () => responses.length > 0 || await (scenarioFeedback ?? feedback).count() > 0, {
+      await expect.poll(async () => responses.length > 0
+        || await (scenarioFeedback ?? feedback).count() > 0
+        || await saveFailedTitle.count() > 0, {
         message: 'Save should produce a component response or visible validation feedback',
       }).toBe(true);
       const response = responses.at(-1);
-      const visibleFeedback = (await feedback.allInnerTexts())
+      // Title and description of the notification, read as separate lines.
+      const notificationLines = (await saveFailedTitle.first().locator('xpath=..').innerText().catch(() => ''))
+        .split('\n').map((text) => text.trim()).filter(Boolean);
+      const visibleFeedback = [...notificationLines, ...await feedback.allInnerTexts()]
         .map((text) => text.replace(/\s+/g, ' ').trim())
         .filter((text) => text && !(options.feedbackPattern && /^Fill mandatory fields and click \+ Add Job\b/i.test(text)))
         // A notification container repeats its message after its own title;
@@ -701,11 +723,17 @@ export class ComponentFormPage extends BasePage {
     };
   }
 
-  /** Enters a Running Hours reading and its date and proves both controlled values are retained. */
+  /**
+   * Enters a Running Hours reading and its date and proves both controlled values are retained.
+   * The date control is the application's masked DD-MM-YYYY field, so an ISO date is typed
+   * day-first through the keyboard exactly as a user enters it.
+   */
   public async setRunningHours(value: string, date: string): Promise<{ runningHours: string; readingDate: string }> {
     await this.openRunningHoursSection();
     await this.replaceStableEditValue(this.runningHoursControl('Running Hours'), value, 'Running Hours');
-    await this.replaceStableEditValue(this.runningHoursControl('Date'), date, 'Running Hours date', 0, true);
+    const iso = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const typedDate = iso ? `${iso[3]}-${iso[2]}-${iso[1]}` : date;
+    await this.replaceStableEditValue(this.runningHoursControl('Date'), typedDate, 'Running Hours date');
     return {
       runningHours: await this.readRunningHoursControl('Running Hours'),
       readingDate: await this.readRunningHoursControl('Date'),

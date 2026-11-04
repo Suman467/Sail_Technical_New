@@ -3,13 +3,15 @@ import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { ComponentFormPage } from '../../pages/ComponentFormPage';
 import { ComponentsPage } from '../../pages/ComponentsPage';
 import { LoginPage } from '../../pages/LoginPage';
-import { attachFailureScreenshot, componentValidationStep, componentScenario } from '../../utils/componentValidationEvidence';
+import { attachFailureScreenshot, componentActionStep, componentValidationStep, componentScenario } from '../../utils/componentValidationEvidence';
 import { trackCreatedComponent } from '../../utils/componentCreationTracker';
 import { openPrimaryComponentsSession, restoreComponentsPage } from '../../utils/componentsSession';
 import { config } from '../../utils/config';
 import { routes } from '../../utils/routes';
 
 type ComponentData = { code: string; name: string };
+/** Wording the application uses to reject a value that another component on the vessel already holds. */
+const duplicateFeedback = /already (?:exists|registered|in use)|duplicate|conflict|must be unique|enter a unique/i;
 type VesselFixture = { vessel: string; parentCode: string; category: string; department: string };
 
 const step = (title: string, expected: string, actual: string, status?: 'NOT RUN' | 'FAIL') =>
@@ -271,6 +273,31 @@ test.describe('Components parent relationships and uniqueness', () => {
     });
   };
 
+  /**
+   * Searches a component by its own code and reads the tree path the search reveals. The row directly
+   * above it at the next shallower level is its parent in the tree. Searching the parent's code instead
+   * would hide any child whose own text does not contain that code.
+   */
+  const treePlacement = (code: string) => componentActionStep(
+    `Search for ${code} and read its position in the component tree`,
+    `The tree should show ${code} beneath the parent it is saved under.`,
+    async () => {
+      await components.clearComponentSearch();
+      await components.searchAndSelectComponentByCode(code);
+      const rows = await components.readExpandedTreeRows();
+      const index = rows.findIndex((row) => row.code === code);
+      const path: string[] = [];
+      for (let row = index, depth = index >= 0 ? rows[index].depth : -1; row >= 0 && depth >= 0; row -= 1) {
+        if (rows[row].depth === depth) { path.unshift(rows[row].code); depth -= 1; }
+      }
+      return { shown: index >= 0, parent: path.length > 1 ? path[path.length - 2] : undefined, path };
+    },
+    (placement) => (placement.shown
+      ? `The tree showed ${code} directly beneath ${placement.parent ?? 'no parent'} (path ${placement.path.join(' > ')}).`
+      : `The search for ${code} did not show it in the tree.`),
+    { page },
+  );
+
   test.beforeAll(async ({ browser }, testInfo) => {
     testInfo.setTimeout(3 * 60_000);
     ({ context, page, components } = await openPrimaryComponentsSession(browser));
@@ -397,11 +424,13 @@ test.describe('Components parent relationships and uniqueness', () => {
     const original = await ownedComponent('CMP-051');
     let secondParent: VesselFixture;
     try {
-      secondParent = secondParentA ??= await test.step(step(
+      secondParent = secondParentA ??= await componentActionStep(
         `Find a second valid parent for Component ${original.code} in Vessel ${vesselA.vessel}`,
         `Vessel ${vesselA.vessel} should provide a valid parent other than ${vesselA.parentCode} for the reassignment test.`,
-        `A second valid parent was found in Vessel ${vesselA.vessel} for Component ${original.code}.`,
-      ), async () => discoverParentFixture(config.vesselA, [vesselA.parentCode]));
+        () => discoverParentFixture(config.vesselA, [vesselA.parentCode]),
+        (found) => `Component ${found.parentCode} in Vessel ${found.vessel} opened Add Component and was chosen as the new parent.`,
+        { page },
+      );
     } catch (error) {
       const reason = 'a second valid same-vessel parent could not be prepared';
       await notExecuted(`Open Edit Component for ${original.code}`, `Component ${original.code} should open with Parent ${vesselA.parentCode}.`, reason);
@@ -426,7 +455,7 @@ test.describe('Components parent relationships and uniqueness', () => {
     await componentValidationStep(page, step(
       `Move ${original.code} from Parent ${vesselA.parentCode} to Parent ${secondParent.parentCode} in Vessel ${vesselA.vessel}`,
       `Component ${original.code} should move from Parent ${vesselA.parentCode} to Parent ${secondParent.parentCode} in Vessel ${vesselA.vessel} without changing its code, name, vessel, other saved fields, or uniqueness.`,
-      `${original.code} moved to ${secondParent.parentCode}, disappeared from ${vesselA.parentCode}, retained its identity and saved fields, and remained unique.`,
+      'Recorded after the validation completes.',
     ), async () => {
       owned = undefined; // the record leaves vesselA.parentCode and must not be reused
       await form.changeParent(secondParent.parentCode);
@@ -434,19 +463,11 @@ test.describe('Components parent relationships and uniqueness', () => {
       await afterSave(vesselA.vessel);
       await expectIdentity(vesselA, original, secondParent.parentCode);
       await trackCreatedComponent({ ...original, vessel: vesselA.vessel, parentCode: secondParent.parentCode, sourceSpec: 'components-parent-relationships-uniqueness.spec.ts', testCaseId: 'CMP-051', runId, createdAt: new Date().toISOString() });
-      await components.clearComponentSearch();
-      await components.searchAndSelectComponentByCode(secondParent.parentCode);
-      expect(
-        await components.directChildCodes(secondParent.parentCode),
-        `${original.code} should be a direct child of new Parent ${secondParent.parentCode}`,
-      ).toContain(original.code);
-      await components.clearComponentSearch();
-      await components.searchAndSelectComponentByCode(vesselA.parentCode);
-      expect(
-        await components.directChildCodes(vesselA.parentCode),
-        `${original.code} should no longer be a direct child of old Parent ${vesselA.parentCode}`,
-      ).not.toContain(original.code);
-      await expectIdentity(vesselA, original, secondParent.parentCode);
+      const placement = await treePlacement(original.code);
+      expect(placement.parent, `${original.code} should be a direct child of new Parent ${secondParent.parentCode}, not of old Parent ${vesselA.parentCode}`).toBe(secondParent.parentCode);
+      return placement;
+    }, {
+      actual: (placement) => `After Save and refresh, ${original.code} (${original.name}) showed Parent Component Code ${secondParent.parentCode} in its details, and the tree showed it directly beneath ${placement.parent} (path ${placement.path.join(' > ')}), no longer beneath ${vesselA.parentCode}; it remained the only record with that code.`,
     });
   });
 
@@ -475,7 +496,8 @@ test.describe('Components parent relationships and uniqueness', () => {
           createdAt: new Date().toISOString(),
         }),
       );
-      expect(feedback, 'Duplicate Component Code feedback should explain why Save was rejected').toMatch(/already exists|duplicate|conflict/i);
+      expect(feedback, 'Duplicate Component Code feedback should explain why Save was rejected').toMatch(duplicateFeedback);
+      expect(feedback, 'The duplicate feedback should be about the Component Code').toMatch(/\bcode\b/i);
       await form.back();
       await selectVessel(vesselA.vessel);
       await expectIdentity(vesselA, existing, vesselA.parentCode, 'after the rejected duplicate-code attempt');
@@ -499,7 +521,8 @@ test.describe('Components parent relationships and uniqueness', () => {
         ...duplicateDraft, vessel: vesselA.vessel, parentCode: vesselA.parentCode,
         sourceSpec: 'components-parent-relationships-uniqueness.spec.ts', testCaseId: 'CMP-053', runId, createdAt: new Date().toISOString(),
       }));
-      expect(feedback, 'Duplicate Component Name feedback should explain why Save was rejected').toMatch(/already exists|duplicate|conflict/i);
+      expect(feedback, 'Duplicate Component Name feedback should explain why Save was rejected').toMatch(duplicateFeedback);
+      expect(feedback, 'The duplicate feedback should be about the Component Name').toMatch(/\bname\b/i);
       await form.back();
       await selectVessel(vesselA.vessel);
       await expectIdentity(vesselA, existing);
@@ -789,26 +812,48 @@ test.describe('Components parent relationships and uniqueness', () => {
       const requiredValues = await form.expectEditReady(hierarchyParent.code);
       expect(requiredValues.name).toBe(hierarchyParent.name);
       await form.changeParent(child.code);
-      const outcome = await form.submitForValidation();
+      // The update request and its response are kept as evidence of what Save actually sent and received.
+      const writes: Array<{ method: string; parentSent: string; status: number; body: string }> = [];
+      const recordWrite = async (response: import('@playwright/test').Response) => {
+        const request = response.request();
+        if (!response.url().includes('/technical/api/components') || request.method() === 'GET') return;
+        const payload = (() => { try { return request.postDataJSON() as Record<string, unknown>; } catch { return {}; } })();
+        const parentSent = Object.entries(payload ?? {}).filter(([key]) => /parent/i.test(key) && !/^isParent$/i.test(key)).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(', ');
+        writes.push({ method: request.method(), parentSent: parentSent || 'no parent field', status: response.status(), body: (await response.text().catch(() => '')).slice(0, 600) });
+      };
+      page.on('response', recordWrite);
+      const outcome = await form.submitForValidation({
+        expected: `Clicking Save with descendant ${child.code} as the parent of ${hierarchyParent.code} should produce an application response or message, which is recorded for the circular-hierarchy check.`,
+      }).finally(() => page.off('response', recordWrite));
       if (outcome.succeeded) {
+        await test.info().attach('CMP-060 Save request and response', {
+          contentType: 'text/plain',
+          body: writes.map((write) => `${write.method} sent ${write.parentSent}; HTTP ${write.status}; response ${write.body || '(empty)'}`).join('\n') || 'No component write request was observed.',
+        });
+        await afterSave(vesselA.vessel);
+        const saved = await componentActionStep(
+          `Reopen Parent ${hierarchyParent.code} and read its saved parent`,
+          `After refresh, Parent ${hierarchyParent.code} should still be saved beneath ${hierarchyRoot.parentCode}, because the circular move must not be applied.`,
+          async () => {
+            const identity = await components.searchAndSelectComponentByCode(hierarchyParent.code).catch(() => undefined);
+            const parent = identity ? await components.readSelectedComponentDetail({ section: 'A. Component Information', label: 'Parent Component Code' }) : undefined;
+            return { found: Boolean(identity), parent };
+          },
+          (state) => (state.found ? `After refresh, ${hierarchyParent.code} showed Parent Component Code ${state.parent}.` : `After refresh, ${hierarchyParent.code} could not be found through an exact search.`),
+          { page },
+        );
+        const accepted = writes.find((write) => write.status >= 200 && write.status < 300);
+        const returnedParent = /"parentId"\s*:\s*("[^"]*"|null)/.exec(accepted?.body ?? '')?.[1];
+        // The server may have stored the circular parent; cleanup must then know the record under it.
         await trackCreatedComponent({
           ...hierarchyParent, vessel: vesselA.vessel, parentCode: child.code,
           sourceSpec: 'components-parent-relationships-uniqueness.spec.ts', testCaseId: 'CMP-060', runId, createdAt: new Date().toISOString(),
         });
-        await afterSave(vesselA.vessel);
-        let persistenceEvidence: string;
-        try {
-          await components.searchAndSelectComponentByCode(hierarchyParent.code);
-          const savedParent = await components.readSelectedComponentDetail({
-            section: 'A. Component Information',
-            label: 'Parent Component Code',
-          });
-          persistenceEvidence = `the reopened record shows Parent ${savedParent}`;
-        } catch {
-          persistenceEvidence = `after refresh, Component ${hierarchyParent.code} was no longer available through exact tree search, which is consistent with the accepted cycle making the branch unreachable`;
-        }
+        const shownAfter = !saved.found
+          ? `after refresh ${hierarchyParent.code} could no longer be found by exact search`
+          : `after refresh the details panel of ${hierarchyParent.code} showed Parent Component Code ${saved.parent}`;
         throw new Error(
-          `Observed Application Result:\nThe application returned HTTP ${outcome.status ?? 'success'} and accepted moving Parent ${hierarchyParent.code} beneath its descendant ${child.code}; ${persistenceEvidence}.`,
+          `Observed Application Result:\nSaving Parent ${hierarchyParent.code} with Parent Component Code ${child.code} (its own descendant) was not refused: Save returned HTTP ${outcome.status ?? 'success'}, the Edit form ${outcome.formRemainedOpen ? 'remained open' : 'closed'} and no circular-hierarchy message was shown. The request sent ${accepted?.parentSent ?? 'no observed parent value'} and the server's response reported parentId ${returnedParent ?? 'not present'}; ${shownAfter}.`,
         );
       }
       await test.step(step(
