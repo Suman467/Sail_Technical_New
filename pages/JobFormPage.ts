@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { readAppNotification } from '../utils/appNotification';
+import { trackCreatedJob } from '../utils/jobCreationTracker';
 
 export type JobIdentity = {
   jobCode: string;
@@ -10,7 +11,7 @@ export type JobIdentity = {
 
 /** Models the normal Job Form opened from a component's D. Jobs section. */
 export class JobFormPage {
-  public constructor(private readonly page: Page) {}
+  public constructor(private readonly page: Page, private readonly vessel?: string) {}
 
   public async expectContext(component: { code: string; name: string }): Promise<void> {
     await expect(this.page.getByRole('heading', { name: 'Job Form', exact: true })).toBeVisible();
@@ -53,6 +54,13 @@ export class JobFormPage {
     const response = await responsePromise;
     const responseBody = await response.text().catch(() => '');
     expect(response.ok(), `Job create should succeed. HTTP ${response.status()}: ${responseBody}`).toBe(true);
+    expect(this.vessel, 'The automation-created Job must have an exact configured Vessel before it can be tracked.').toBeTruthy();
+    await trackCreatedJob({
+      ...identity,
+      vessel: this.vessel!,
+      source: 'JobFormPage.create normal UI workflow',
+      createdAt: new Date().toISOString(),
+    });
     const notification = this.page.getByText(/job .*?(?:created|saved).*success/i).filter({ visible: true }).last();
     await notification.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined);
     return { identity, feedback: await notification.innerText().catch(() => `Job create returned HTTP ${response.status()}.`) };

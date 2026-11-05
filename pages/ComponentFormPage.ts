@@ -978,7 +978,7 @@ export class ComponentFormPage extends BasePage {
     await expect(this.page.getByRole('heading', { name: /^(?:add )?job form$/i }).filter({ visible: true }),
       'The Add Job form should open after the component is saved').toBeVisible({ timeout: 20_000 });
     this.saveSucceeded = true;
-    return { componentCode, componentName, vessel: this.selectedVessel, actionLabel, jobForm: new JobFormPage(this.page) };
+    return { componentCode, componentName, vessel: this.selectedVessel, actionLabel, jobForm: new JobFormPage(this.page, this.selectedVessel) };
   }
 
   private async expectReadyForJobCreation(componentCode: string, componentName: string): Promise<void> {

@@ -10,6 +10,7 @@ import { config } from '../../utils/config';
 
 type ComponentIdentity = { code: string; name: string };
 type CreatedComponentIdentity = ComponentIdentity & { parentCode: string };
+type SelectedComponentSource = 'reused' | 'newly created';
 type OptionalValues = Record<'Model' | 'Rating' | 'Location' | 'Notes / Technical Information', string>;
 
 const step = (title: string, expected: string, actual: string, status?: 'FAIL' | 'NOT RUN') =>
@@ -25,6 +26,7 @@ test.describe('Components CMP-082 to CMP-092 - Edit and persistence', () => {
   let secondaryPage: Page | undefined;
   let secondaryComponents: ComponentsPage | undefined;
   let selected: ComponentIdentity;
+  let selectedSource: SelectedComponentSource;
   const vessel = config.vesselA;
   const runToken = randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase();
 
@@ -126,7 +128,7 @@ test.describe('Components CMP-082 to CMP-092 - Edit and persistence', () => {
     return openEdit();
   };
 
-  const selectSafeComponent = async (): Promise<ComponentIdentity> => {
+  const selectSafeComponent = async (): Promise<ComponentIdentity | undefined> => {
     const tracked = (await readTrackedComponents())
       .filter((item) => item.vessel === vessel && (item.cleanupStatus === undefined || item.cleanupStatus === 'pending'))
       .sort((first, second) => first.code.localeCompare(second.code));
@@ -158,7 +160,53 @@ test.describe('Components CMP-082 to CMP-092 - Edit and persistence', () => {
       }
       await components.clearComponentSearch();
     }
-    throw new Error(`No editable automation-owned component was available in Vessel ${vessel}; unrelated operational components were not modified.`);
+    return undefined;
+  };
+
+  const createReusableComponent = async (): Promise<CreatedComponentIdentity> => {
+    const suffix = `${Date.now().toString(36)}${randomUUID().replace(/-/g, '').slice(0, 4)}`.toUpperCase();
+    const created = { code: `AT082-${suffix}`.slice(0, 20), name: `Test CMP082 ${suffix}` };
+    const visibleRows = await components.readExpandedTreeRows();
+    const parent = visibleRows.find((row) => !/^AT\d{3}-/i.test(row.code));
+    expect(parent, `Configured Vessel ${vessel} should expose an accessible component parent for automation test data`).toBeTruthy();
+    const parentCode = parent!.code;
+
+    await componentActionStep(
+      `Create reusable automation Component ${created.code} (${created.name})`,
+      `When Vessel ${vessel} has no suitable automation-owned component, one unique component should save under accessible Parent ${parentCode} through the normal Components form.`,
+      async () => {
+        expect(await components.exactComponentCountFullyLoaded(created.code)).toBe(0);
+        await components.clearComponentSearch();
+        await components.searchAndSelectComponentByCode(parentCode);
+        const form = await components.openComponentForAdd();
+        await form.fillRequired({ parentCode, code: created.code, name: created.name, category: 'Ship General', department: config.componentDepartment, isParent: 'No', isActive: 'Yes', actorLabel: 'the primary automation user' });
+        await form.saveValid();
+        await trackCreatedComponent({ ...created, vessel, parentCode, sourceSpec: 'components-edit-and-persistence.spec.ts', testCaseId: 'CMP-082-CMP-092 shared preparation', runId: `cmp082-cmp092-${suffix}`, createdAt: new Date().toISOString() });
+        return created;
+      },
+      () => `The application saved Component ${created.code} (${created.name}) under Parent ${parentCode} in Vessel ${vessel}, and the component was recorded for explicit manual cleanup.`,
+      { page },
+    );
+
+    // The successful Save is already tracked. Retry only lookup and verification;
+    // never submit a second Create if the refreshed tree is slow to update.
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await restoreComponentsPage(page, components, vessel);
+        const identity = await components.searchAndSelectComponentByCode(created.code);
+        expect(identity).toEqual({ ...created, vesselName: vessel });
+        const form = await components.openSelectedComponentForEdit();
+        await form.expectEditReady(created.code);
+        expect(await form.controlValue('Component Name', 'input-component-name')).toBe(created.name);
+        await form.back();
+        expect(await components.exactComponentCount(created.code)).toBe(1);
+        return { ...created, parentCode };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw new Error(`Created and tracked Component ${created.code} (${created.name}) in Vessel ${vessel}, but its exact editable identity could not be verified after refresh. No additional component was created.`, { cause: lastError });
   };
 
   test.beforeAll(async ({ browser }, testInfo) => {
@@ -175,10 +223,20 @@ test.describe('Components CMP-082 to CMP-092 - Edit and persistence', () => {
     });
     selected = await test.step(step(
       'Initial setup - Select one safe editable automation component',
-      'One existing automation-owned component should be selected by exact code, name, and vessel for the edit scenarios.',
-      'An existing automation-owned component was selected and its editable identity was verified.',
-    ), () => selectSafeComponent());
-    testInfo.annotations.push({ type: 'components-selected-shared-component', description: `${selected.code} | ${selected.name} | ${vessel}` });
+      `One existing automation-owned component should be verified by exact code, name, Vessel ${vessel}, and edit permission; if none exists, one unique automation component should be created, tracked, refreshed, and verified for the edit scenarios.`,
+      `One safe automation component was prepared through the UI with its exact code, name, vessel, edit permission, and preparation source recorded.`,
+    ), async () => {
+      const existing = await selectSafeComponent();
+      selectedSource = existing ? 'reused' : 'newly created';
+      const prepared = existing ?? await createReusableComponent();
+      await test.step(step(
+        `Record selected Component ${prepared.code} (${prepared.name})`,
+        `The shared component record should state exact Code, Name, Vessel ${vessel}, and whether the component was reused or newly created.`,
+        `The suite ${selectedSource === 'reused' ? 'reused' : 'newly created and tracked'} Component ${prepared.code} (${prepared.name}) in Vessel ${vessel}; its exact identity and editable form were verified through the UI.`,
+      ), async () => {});
+      return prepared;
+    });
+    testInfo.annotations.push({ type: 'components-selected-shared-component', description: `${selected.code} | ${selected.name} | ${vessel} | ${selectedSource}` });
   });
 
   test.afterEach(async () => {

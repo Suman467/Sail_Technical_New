@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { ComponentsPage, type GeneratedWorkOrderResult } from '../../pages/ComponentsPage';
+import { TechnicalPage } from '../../pages/TechnicalPage';
 import { WorkOrderPage } from '../../pages/WorkOrderPage';
 import { routes } from '../../utils/routes';
 import { componentActionStep, componentScenario, componentValidationStep, attachFailureScreenshot } from '../../utils/componentValidationEvidence';
-import { readTrackedComponents, trackCreatedComponent } from '../../utils/componentCreationTracker';
+import { readTrackedComponents, trackComponentWorkOrder, trackCreatedComponent } from '../../utils/componentCreationTracker';
 import { openPrimaryComponentsSession, restoreComponentsPage } from '../../utils/componentsSession';
 import { config } from '../../utils/config';
 import { readAppNotification } from '../../utils/appNotification';
@@ -182,7 +183,7 @@ test.describe('CMP-122 to CMP-132 - Linked Jobs and Work Orders', () => {
   });
 
   test('CMP-124 - Add a job to a new automation component', componentScenario(
-    'A valid automation job should save and remain linked to the intended automation component in AUTO_VESSEL_002 after refresh.'), async () => {
+    `A valid automation job should save and remain linked to the intended automation component in ${vessel} after refresh.`), async () => {
     await components.searchAndSelectComponentByCode(parentCode);
     const form = await components.openComponentForAdd();
     await form.fillRequired({ parentCode, code: cmp124.code, name: cmp124.name, category: 'Ship Common Systems', department: config.componentDepartment, isParent: 'No', isActive: 'Yes' });
@@ -205,21 +206,27 @@ test.describe('CMP-122 to CMP-132 - Linked Jobs and Work Orders', () => {
   });
 
   test('CMP-125 - Save and Add Jobs for a genuinely new component', componentScenario(
-    'The new component should save first, the application should open Add Job with the new component and AUTO_VESSEL_002 context, and the saved job should remain linked to it after refresh.'), async () => {
+    `The new component should save first, the application should open Add Job with the new component and ${vessel} context, and the saved job should remain linked to it after refresh.`), async () => {
     const existing = await latestCmp125();
     if (existing) {
       const expectedJob = cmp125JobFor(existing.code);
       const reusable = await checkStep(
-        `Check component ${existing.code} for Job ${expectedJob.jobCode}`,
-        `If Component ${existing.code} already shows Job ${expectedJob.jobCode}, reuse it instead of creating a duplicate.`,
+        `Check tracked component ${existing.code} for Job ${expectedJob.jobCode}`,
+        `If tracked Component ${existing.code} (${existing.name}) still exists in ${vessel} and already shows Job ${expectedJob.jobCode}, reuse it instead of creating a duplicate; otherwise create a new component and job.`,
       async () => {
+        // A tracked record can be stale when the component was removed outside
+        // this suite, so confirm the exact identity exists before selecting it.
+        if (await components.exactComponentCountFullyLoaded(existing.code) === 0) return { identity: undefined, job: undefined };
         const identity = await components.searchAndSelectComponentByCode(existing.code);
+        if (identity.name !== existing.name || identity.vesselName !== vessel) return { identity, job: undefined };
         const { jobs } = await components.readAllLinkedJobs();
         return { identity, job: jobs.find((job) => job.jobCode === expectedJob.jobCode) };
       }, {
-        actual: ({ identity, job }) => (job
-          ? `Component ${identity.code} (${identity.name}) in ${identity.vesselName} already shows Job ${job.jobCode} (${job.jobTitle}); it is reused.`
-          : `Component ${identity.code} (${identity.name}) does not show Job ${expectedJob.jobCode}, so a new component and job are required.`),
+        actual: ({ identity, job }) => (!identity
+          ? `An exact search in ${vessel} found no Component ${existing.code}; the tracked record is stale, so a new component and job are required.`
+          : job
+            ? `Component ${identity.code} (${identity.name}) in ${identity.vesselName} already shows Job ${job.jobCode} (${job.jobTitle}); it is reused.`
+            : `Component ${identity.code} (${identity.name}) in ${identity.vesselName} does not show Job ${expectedJob.jobCode}, so a new component and job are required.`),
       });
       if (reusable.job) {
         test.skip(true, `SKIPPED — existing Component ${existing.code} and Job ${reusable.job.jobCode} were verified and reused; no duplicate was created.`);
@@ -267,55 +274,170 @@ test.describe('CMP-122 to CMP-132 - Linked Jobs and Work Orders', () => {
   });
 
   /**
-   * Opens the latest tracked CMP-125 component and reads its jobs. When no
-   * tracked CMP-125 component exists, records the missing prerequisite and
-   * stops the dependent scenario as NOT EXECUTED.
+   * Prepares CMP-128's own automation component without depending on another
+   * scenario: reuses the latest CMP-128 component only when its exact identity
+   * still exists in the vessel, otherwise creates and verifies a new one.
    */
-  const openCmp125Component = async () => {
-    const tracked = await latestCmp125();
-    if (!tracked) {
-      await test.step(`${step('Locate an automation-created component', `An automation-created component should exist in ${vessel}.`, `No suitable automation-created component is available in ${vessel}.`)}\nStatus: NOT RUN`, async () => {});
-      test.skip(true, `NOT EXECUTED: no suitable automation-created component exists in ${vessel}.`);
-      throw new Error('unreachable');
+  const prepareCmp128Component = async (): Promise<{ code: string; name: string }> => {
+    const tracked = (await readTrackedComponents())
+      .filter((item) => item.vessel === vessel && item.testCaseId === 'CMP-128' && item.cleanupStatus === 'pending')
+      .at(-1);
+    if (tracked) {
+      const reusable = await checkStep(
+        `Check tracked CMP-128 component ${tracked.code} in ${vessel}`,
+        `If Component ${tracked.code} (${tracked.name}) still exists in ${vessel}, it should be reused; otherwise a new automation component is required.`,
+        async () => {
+          if (await components.exactComponentCountFullyLoaded(tracked.code) === 0) return undefined;
+          const identity = await components.searchAndSelectComponentByCode(tracked.code);
+          return identity.name === tracked.name && identity.vesselName === vessel ? identity : undefined;
+        },
+        { actual: (identity) => (identity
+          ? `Component ${identity.code} (${identity.name}) was found in ${identity.vesselName} and is reused.`
+          : `An exact search in ${vessel} did not find Component ${tracked.code} (${tracked.name}); a new automation component is required.`) },
+      );
+      if (reusable) return { code: reusable.code, name: reusable.name };
+      await restoreComponentsPage(page, components, vessel);
     }
-    const expectedJob = cmp125JobFor(tracked.code);
+
+    const created = { code: `AT128-${token}`, name: `CMP128 Delete Job Host ${token}` };
+    await componentActionStep(
+      `Create automation Component ${created.code} under parent ${parentCode}`,
+      `Component ${created.code} (${created.name}) should be saved in ${vessel} under parent ${parentCode}.`,
+      async () => {
+        expect(await components.exactComponentCountFullyLoaded(created.code), `Component ${created.code} should not already exist`).toBe(0);
+        await components.searchAndSelectComponentByCode(parentCode);
+        const form = await components.openComponentForAdd();
+        await form.fillRequired({ parentCode, code: created.code, name: created.name, category: 'Ship Common Systems', department: config.componentDepartment, isParent: 'No', isActive: 'Yes' });
+        await form.saveValid();
+        await trackCreatedComponent({ ...created, vessel, parentCode, sourceSpec: 'components-linked-jobs-work-orders.spec.ts', testCaseId: 'CMP-128', runId, createdAt: new Date().toISOString() });
+      },
+      () => `Component ${created.code} (${created.name}) was saved in ${vessel} under parent ${parentCode} and recorded as automation-owned.`,
+      { page },
+    );
+    await restoreComponentsPage(page, components, vessel);
     const identity = await checkStep(
-      `Select component ${tracked.code}`,
-      `Component ${tracked.code} (${tracked.name}) should be selected.`,
-      () => components.searchAndSelectComponentByCode(tracked.code),
-      { actual: (selected) => `Component ${selected.code} (${selected.name}) was selected.` });
-    const opened = await checkStep(
-      'Open D. Jobs and locate the existing job',
-      `D. Jobs should display the linked jobs for Component ${tracked.code}.`,
-    async () => {
-      expect(identity.code).toBe(tracked.code);
-      expect(identity.vesselName).toBe(vessel);
-      const { jobs } = await components.readAllLinkedJobs();
-      return { identity, jobs };
-    }, { actual: ({ identity: selected, jobs }) => describeJobs(selected.code)({ jobs, emptyMessage: jobs.length ? '' : noJobsMessage }) });
-    return { tracked, expectedJob, ...opened, job: opened.jobs.find((job) => job.jobCode === expectedJob.jobCode) };
+      `Refresh and verify Component ${created.code}`,
+      `After refresh, Component ${created.code} (${created.name}) should be found in ${vessel}.`,
+      async () => {
+        const selected = await components.searchAndSelectComponentByCode(created.code);
+        expect(selected).toEqual({ ...created, vesselName: vessel });
+        return selected;
+      },
+      { actual: (selected) => `After refresh, Component ${selected.code} (${selected.name}) was found and selected in ${selected.vesselName}.` },
+    );
+    return { code: identity.code, name: identity.name };
+  };
+
+  type Cmp126Fixture = {
+    identity: { code: string; name: string; vesselName: string };
+    job: ComponentJobRow;
+    source: 'reused' | 'new job' | 'new component and job';
+  };
+
+  const findWorkOrdersForJob = async (jobCode: string) => {
+    const workOrders = new WorkOrderPage(page);
+    await page.goto(routes.workOrder, { waitUntil: 'domcontentloaded' });
+    await workOrders.expectToBeOnPage();
+    await workOrders.selectVessel(vessel);
+    return workOrders.findWorkOrdersByJobCode(jobCode);
+  };
+
+  /** Reuses exact tracked automation data, or creates the minimum isolated fixture required by CMP-126. */
+  const selectCmp126Fixture = async (): Promise<Cmp126Fixture> => {
+    let reusableComponent: Cmp126Fixture['identity'] | undefined;
+    const tracked = (await readTrackedComponents())
+      .filter((item) => item.vessel === vessel && (item.cleanupStatus === undefined || item.cleanupStatus === 'pending'))
+      .sort((first, second) => second.createdAt.localeCompare(first.createdAt));
+    for (const candidate of tracked) {
+      try {
+        await restoreComponentsPage(page, components, vessel);
+        const identity = await components.searchAndSelectComponentByCode(candidate.code);
+        if (identity.name !== candidate.name || identity.vesselName !== vessel) continue;
+        reusableComponent ??= identity;
+        const { jobs } = await components.readAllLinkedJobs();
+        for (const job of jobs.filter((item) => /^ATJ\d+-/i.test(item.jobCode) || /automation|CMP\d+/i.test(item.jobTitle))) {
+          // Inspect every existing automation job, but do not treat an empty
+          // Work Orders list search as proof of eligibility: the application
+          // can omit a planned job association from those search results.
+          // A fresh unique Job Code is therefore required before Generate WO.
+          await findWorkOrdersForJob(job.jobCode);
+        }
+        break;
+      } catch {
+        // Stale tracker entries are skipped without changing their application data.
+      }
+    }
+
+    await restoreComponentsPage(page, components, vessel);
+    let identity = reusableComponent;
+    let source: Cmp126Fixture['source'] = 'new job';
+    if (!identity) {
+      const suffix = `${Date.now().toString(36)}${randomUUID().replace(/-/g, '').slice(0, 4)}`.toUpperCase();
+      const created = { code: `AT126-${suffix}`.slice(0, 20), name: `CMP126 Work Order ${suffix}` };
+      const rows = await components.readExpandedTreeRows();
+      const parent = rows.find((row) => !/^AT\d{3}-/i.test(row.code));
+      expect(parent, `${vessel} should expose an accessible parent for a CMP-126 automation component`).toBeTruthy();
+      expect(await components.exactComponentCountFullyLoaded(created.code)).toBe(0);
+      await components.searchAndSelectComponentByCode(parent!.code);
+      const form = await components.openComponentForAdd();
+      await form.fillRequired({ parentCode: parent!.code, code: created.code, name: created.name, category: 'Ship General', department: config.componentDepartment, isParent: 'No', isActive: 'Yes', actorLabel: 'the primary automation user' });
+      await form.saveValid();
+      await trackCreatedComponent({ ...created, vessel, parentCode: parent!.code, sourceSpec: 'components-linked-jobs-work-orders.spec.ts', testCaseId: 'CMP-126', runId, createdAt: new Date().toISOString() });
+      await restoreComponentsPage(page, components, vessel);
+      identity = await components.searchAndSelectComponentByCode(created.code);
+      expect(identity).toEqual({ ...created, vesselName: vessel });
+      source = 'new component and job';
+    } else {
+      expect(await components.searchAndSelectComponentByCode(identity.code)).toEqual(identity);
+    }
+
+    const suffix = randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase();
+    const createdJob = { jobCode: `ATJ126-${suffix}`, jobTitle: `CMP126 Work Order Job ${suffix}` };
+    const jobForm = await components.openAddJob();
+    await jobForm.expectContext({ code: identity.code, name: identity.name });
+    await jobForm.fillRequired({ ...createdJob, description: `Automation-owned eligible Work Order job ${suffix}` });
+    const created = await jobForm.create();
+    expect(created.identity).toMatchObject({ ...createdJob, componentCode: identity.code });
+    await restoreComponentsPage(page, components, vessel);
+    expect(await components.searchAndSelectComponentByCode(identity.code)).toEqual(identity);
+    const { jobs } = await components.readAllLinkedJobs();
+    const job = jobs.find((item) => item.jobCode === createdJob.jobCode && item.jobTitle === createdJob.jobTitle);
+    expect(job, `New Job ${createdJob.jobCode} should remain linked to Component ${identity.code}`).toBeTruthy();
+    return { identity, job: job!, source };
   };
 
   test('CMP-126 - Generate Work Order and verify actual status', componentScenario(
     'An existing automation job should show a Generate WO action that creates a work order linked to the selected job and component and remains available after refresh.'), async () => {
-    test.setTimeout(10 * 60_000);
-    const { identity, expectedJob, job } = await openCmp125Component();
-    if (!job) {
-      await test.step(`${step(`Locate Job ${expectedJob.jobCode}`, `Job ${expectedJob.jobCode} (${expectedJob.jobTitle}) should be listed under Component ${identity.code}.`, `Job ${expectedJob.jobCode} was not listed under Component ${identity.code}; no work order was generated and no status was assumed.`)}\nStatus: NOT RUN`, async () => {});
-      test.skip(true, `NOT EXECUTED: Job ${expectedJob.jobCode} was not listed under Component ${identity.code}.`);
-      return;
-    }
+    test.setTimeout(20 * 60_000);
+    const fixture = await componentActionStep(
+      'Select an automation-owned component and job without an existing Work Order',
+      `The suite should reuse exact tracked automation data in ${vessel} only when Work Orders search shows no association; otherwise it should create unique tracked automation data through the UI.`,
+      () => selectCmp126Fixture(),
+      ({ identity: selected, job: selectedJob, source }) => `The suite ${source === 'reused' ? 'reused' : 'created'} automation Component ${selected.code} (${selected.name}) and Job ${selectedJob.jobCode} (${selectedJob.jobTitle}) in ${selected.vesselName}; Work Orders search showed no existing association for the selected job.`,
+      { page },
+    );
+    const { identity, job } = fixture;
+    test.info().annotations.push({ type: 'CMP-126 runtime data', description: `${identity.code} | ${identity.name} | ${job.jobCode} | ${job.jobTitle} | ${vessel} | ${fixture.source}` });
+
+    const beforeGeneration = await checkStep(
+      `Verify Job ${job.jobCode} has no existing Work Order`,
+      `Across every Work Orders status in ${vessel}, Job ${job.jobCode} should have zero existing or planned Work Orders before Generate WO is clicked.`,
+      () => findWorkOrdersForJob(job.jobCode),
+      { actual: (matches) => `Work Orders search across all visible status tabs in ${vessel} returned ${matches.length} association(s) for Job ${job.jobCode}; Generate WO was ${matches.length ? 'not permitted' : 'safe to attempt once'}.` },
+    );
+    expect(beforeGeneration, `Job ${job.jobCode} already has an existing or planned Work Order; no duplicate may be generated`).toHaveLength(0);
+    await restoreComponentsPage(page, components, vessel);
+    expect(await components.searchAndSelectComponentByCode(identity.code)).toEqual(identity);
 
     await checkStep(
-      `Locate Generate WO for Job ${job.jobCode}`,
-      `The Action column should show Generate WO for Job ${job.jobCode} under Component ${identity.code}.`,
-    async () => {
-      const button = await components.generateWorkOrderButton(job.jobCode);
-      expect(
-        await button.isVisible().catch(() => false),
-        `Generate WO button was not visible in the Action column for Job Code ${job.jobCode} under Component ${identity.code}. Work-order generation could not be performed.`,
-      ).toBe(true);
-    }, { actual: () => `Generate WO was visible in the Action column for Job Code ${job.jobCode} under Component ${identity.code}.` });
+      `Locate Generate WO for eligible Job ${job.jobCode}`,
+      `After the zero-Work-Order check, the Action column should show Generate WO for Job ${job.jobCode} under Component ${identity.code}.`,
+      async () => {
+        const button = await components.generateWorkOrderButton(job.jobCode);
+        expect(await button.isVisible().catch(() => false), `Generate WO was not visible for eligible Job ${job.jobCode} under Component ${identity.code}.`).toBe(true);
+      },
+      { actual: () => `Generate WO was visible for eligible Job ${job.jobCode} under automation Component ${identity.code} in ${vessel}.` },
+    );
 
     const result = await componentActionStep(
       `Click Generate WO for Job ${job.jobCode} and select a reason`,
@@ -340,35 +462,54 @@ test.describe('CMP-122 to CMP-132 - Linked Jobs and Work Orders', () => {
       return result;
     }, { actual: (value) => `Work Order ${value.workOrderNumber} was created with status "${value.status || 'not stated by the application'}". Application message: "${value.feedback}".` });
 
+    await trackComponentWorkOrder(identity.code, vessel, {
+      workOrderNumber: result.workOrderNumber,
+      status: result.status || 'not stated by the application',
+      jobCode: job.jobCode,
+      jobTitle: job.jobTitle,
+      createdAt: new Date().toISOString(),
+    });
+
+    const workOrders = await componentActionStep(
+      `Open PMS → Work Orders and select Vessel ${vessel}`,
+      `The Work Orders page should open from the PMS menu in the existing session, reload with fresh data, and show Vessel ${vessel} selected.`,
+      async () => {
+        const opened = await new TechnicalPage(page).openWorkOrder();
+        await opened.expectToBeOnPage();
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await opened.expectToBeOnPage();
+        await opened.selectVessel(vessel);
+        return opened;
+      },
+      () => `The Work Orders (W.O) page opened from the PMS menu without another login, was refreshed, and Vessel ${vessel} was selected.`,
+      { page },
+    );
+
+    const located = await checkStep(
+      `Search Work Order ${result.workOrderNumber}, starting on the Scheduled tab`,
+      `A search for the exact number ${result.workOrderNumber} should list the Work Order on the Scheduled tab, or on another status tab if it is not scheduled.`,
+      async () => {
+        const search = await workOrders.locateWorkOrder(result.workOrderNumber, 'Scheduled');
+        expect(search.found, `Work Order ${result.workOrderNumber} was not listed in ${vessel} after searching the ${search.searchedTabs.join(', ')} tab(s).`).toBeTruthy();
+        return { ...search, found: search.found! };
+      },
+      { actual: ({ found, searchedTabs }) => `The exact search for ${result.workOrderNumber} listed the Work Order under the "${found.tab}" tab${searchedTabs.length > 1 ? ` after the ${searchedTabs.slice(0, -1).join(', ')} tab(s) showed no match` : ''}.` },
+    );
+    test.info().annotations.push({ type: 'CMP-126 Work Order tab', description: `${result.workOrderNumber} | ${located.found.tab} | ${located.found.values.Status ?? ''}` });
+
     await componentValidationStep(page, step(
-      `Refresh and verify Work Order ${result.workOrderNumber}`,
-      `After refresh, Work Order ${result.workOrderNumber} should be listed for ${vessel} and linked to Job ${job.jobCode} and Component ${identity.code}.`,
+      `Verify Work Order ${result.workOrderNumber} row details`,
+      `The refreshed row should show Work Order ${result.workOrderNumber}, Job Title "${job.jobTitle}" for Job ${job.jobCode}, Component ${identity.name} (${identity.code}), and an actual status.`,
       'Recorded after the validation completes.',
     ), async () => {
-      const workOrders = new WorkOrderPage(page);
-      await page.goto(routes.workOrder, { waitUntil: 'domcontentloaded' });
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      await workOrders.expectToBeOnPage();
-      await workOrders.selectVessel(vessel);
-      const found = await workOrders.findWorkOrder(result.workOrderNumber);
-      expect(found, `Work Order ${result.workOrderNumber} was not listed under any Work Orders tab for ${vessel} after refresh.`).toBeTruthy();
-      let evidence = found!.rowText;
-      const linked = (text: string) => ({
-        job: [job.jobCode, job.jobTitle].some((value) => text.toLowerCase().includes(value.toLowerCase())),
-        component: [identity.code, identity.name].some((value) => text.toLowerCase().includes(value.toLowerCase())),
-      });
-      let association = linked(evidence);
-      if (!association.job || !association.component) {
-        // The list may not show every association; read the opened work order's details.
-        await page.getByRole('gridcell').filter({ hasText: result.workOrderNumber }).first().click();
-        await page.waitForURL(/\/technical\/pms\/work-order\/[^/]+/, { timeout: 30_000 }).catch(() => undefined);
-        evidence = await page.locator('body').innerText();
-        association = linked(evidence);
-      }
-      expect(association.job, `Work Order ${result.workOrderNumber} did not display Job ${job.jobCode} (${job.jobTitle}).`).toBe(true);
-      expect(association.component, `Work Order ${result.workOrderNumber} did not display Component ${identity.code} (${identity.name}).`).toBe(true);
-      return found!;
-    }, { actual: (found) => `After refresh, Work Order ${result.workOrderNumber} was listed under the "${found.tab}" tab for ${vessel}${found.values.Status ? ` with status "${found.values.Status}"` : ''}, and showed Job ${job.jobCode} and Component ${identity.code}.` });
+      const { values } = located.found;
+      expect(values['Work Order No'], 'The listed Work Order Number should match exactly').toBe(result.workOrderNumber);
+      expect(values['Job Title'], `Work Order ${result.workOrderNumber} should be linked to Job ${job.jobCode} (${job.jobTitle})`).toBe(job.jobTitle);
+      expect(values.Component, `Work Order ${result.workOrderNumber} should be linked to Component ${identity.code} (${identity.name})`).toBe(identity.name);
+      expect(result.workOrderNumber, 'The Work Order Number should embed the Job Code and Component Code').toContain(`${job.jobCode}-${identity.code}`);
+      expect(values.Status ?? '', `Work Order ${result.workOrderNumber} should display its actual status`).toMatch(/\w/);
+      return located.found;
+    }, { actual: (found) => `After refresh, the "${found.tab}" tab listed Work Order ${found.values['Work Order No']} for Component ${found.values.Component} (${identity.code}) and Job "${found.values['Job Title']}" (${job.jobCode}), with status "${found.values.Status}"${result.status ? (result.status === found.values.Status ? ', matching the status reported at creation' : `; the creation response had reported "${result.status}"`) : ''}.` });
   });
 
   test('CMP-127 - Show All, Expand, Collapse and Pagination', componentScenario(
@@ -479,8 +620,7 @@ test.describe('CMP-122 to CMP-132 - Linked Jobs and Work Orders', () => {
   test('CMP-128 - Delete a newly created linked job', componentScenario(
     'A new job created only for this scenario should be deleted and no longer appear under D. Jobs after refresh, while the other linked jobs remain unchanged.'), async () => {
     test.setTimeout(10 * 60_000);
-    const { identity } = await openCmp125Component();
-    const component = { code: identity.code, name: identity.name };
+    const component = await prepareCmp128Component();
 
     const jobForm = await componentActionStep(
       `Open D. Jobs and create a new job for component ${component.code}`,

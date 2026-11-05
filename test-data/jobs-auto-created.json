@@ -1,0 +1,50 @@
+[
+  {
+    "jobCode": "ATJ124-FB1649",
+    "jobTitle": "CMP124 Linked Job FB1649",
+    "componentCode": "AT124-FB1649",
+    "componentName": "CMP124 Jobs FB1649",
+    "vessel": "AUTO_VESSEL_002",
+    "source": "Recovered from exact component cleanup authorization or generated Work Order record",
+    "createdAt": "2026-10-23T17:24:00.041Z",
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T09:47:03.370Z",
+    "cleanupResult": "Deleted through Jobs Form and confirmed absent after refresh from Component AT124-FB1649."
+  },
+  {
+    "jobCode": "ATJ124-F7D2D2",
+    "jobTitle": "CMP124 Linked Job F7D2D2",
+    "componentCode": "AT124-F7D2D2",
+    "componentName": "CMP124 Jobs F7D2D2",
+    "vessel": "AUTO_VESSEL_003",
+    "source": "Recovered from exact component cleanup authorization or generated Work Order record",
+    "createdAt": "2026-10-28T02:49:56.920Z",
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T09:48:11.274Z",
+    "cleanupResult": "Deleted through Jobs Form and confirmed absent after refresh from Component AT124-F7D2D2."
+  },
+  {
+    "jobCode": "ATJ125-F7D2D2",
+    "jobTitle": "CMP125 Linked Job F7D2D2",
+    "componentCode": "AT125-F7D2D2",
+    "componentName": "CMP125 Save Add Job F7D2D2",
+    "vessel": "AUTO_VESSEL_003",
+    "source": "Recovered from exact component cleanup authorization or generated Work Order record",
+    "createdAt": "2026-10-28T02:50:23.579Z",
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T09:49:01.988Z",
+    "cleanupResult": "Deleted through Jobs Form and confirmed absent after refresh from Component AT125-F7D2D2."
+  },
+  {
+    "jobCode": "ATJ124-9E47A9",
+    "jobTitle": "CMP124 Linked Job 9E47A9",
+    "componentCode": "AT124-9E47A9",
+    "componentName": "CMP124 Jobs 9E47A9",
+    "vessel": "AUTO_VESSEL_004",
+    "source": "Recovered from exact component cleanup authorization or generated Work Order record",
+    "createdAt": "2026-11-04T11:20:03.415Z",
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T09:49:47.395Z",
+    "cleanupResult": "Deleted through Jobs Form and confirmed absent after refresh from Component AT124-9E47A9."
+  }
+]

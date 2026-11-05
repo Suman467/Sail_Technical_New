@@ -376,7 +376,7 @@ function renderSpecReportBase(
   const total = rows.length;
   const passPercent = total === 0 ? 0 : Math.round((passed / total) * 100);
   const reportStatus = ({ PASSED: "PASS", FAILED: "FAIL", INCOMPLETE: "INCOMPLETE", SKIPPED: "SKIPPED" } as const)[overallExecutionStatus({ failed, notExecuted, skipped, total })];
-  const components = rows[0]?.moduleFolder === "components" ? buildComponentsReport(rows) : undefined;
+  const components = usesScenarioReport(rows[0]?.moduleFolder) ? buildComponentsReport(rows) : undefined;
   const consolidateCommonSetup = !components && /components/i.test(specName) && rows.length > 1;
   const commonSetup = new Map<string, ParsedBusinessStep>();
   if (consolidateCommonSetup) {
@@ -464,7 +464,7 @@ function renderValidationReport(
     ...new Set(fileAttempts.map((attempt) => attempt.fileName)),
   ];
   // Components reports name the vessels and users the run actually used.
-  const isComponents = rows[0]?.moduleFolder === "components";
+  const isComponents = usesScenarioReport(rows[0]?.moduleFolder);
   const componentVessels = isComponents ? runtimeVessels(rows) : [];
   const vesselLabel = componentVessels.length > 1 ? "Vessels" : "Vessel";
   const vessels = componentVessels.length ? componentVessels.join(", ") : config.vesselName;
@@ -881,6 +881,16 @@ type ComponentsReport = { commonSetup: ComponentsReportStep[]; cases: Components
 const GENERIC_CONFIRMATION =
   /^(?:login page is open|audit dashboard page is open|components page is open)$/i;
 const LOGIN_STEP = /^(?:log ?in|login)\b/i;
+/** Test case IDs such as CMP-125 or RH-P01. */
+const TEST_CASE_ID = /\b[A-Z]+-[A-Z]?\d+\b/;
+
+/**
+ * Report modules built as scenario reports (Common Setup once, scenario
+ * Expected/Actual Results, runtime vessels): Components and Running Hours.
+ */
+function usesScenarioReport(moduleFolder: string | undefined): boolean {
+  return moduleFolder === "components" || moduleFolder === "running-hours";
+}
 
 function isGenericConfirmation(title: string): boolean {
   return GENERIC_CONFIRMATION.test(title.trim());
@@ -1374,7 +1384,7 @@ function renderResultRow(
     : "";
   const caseOutcome = classifyCaseOutcome(row.status, row.expectedStatus, row.annotations.some(Boolean), row.annotations.at(-1));
   const resultLabel = caseOutcome === "not-executed" ? "NOT EXECUTED" : caseOutcome.toUpperCase();
-  const testId = row.title.match(/\b[A-Z]+-\d+\b/)?.[0] ?? `Test ${index + 1}`;
+  const testId = row.title.match(TEST_CASE_ID)?.[0] ?? `Test ${index + 1}`;
   const scenarioName = row.title.replace(new RegExp(`^\\s*${testId}\\s*[-:â€”–]?\\s*`, "i"), "") || row.title;
   return `<details class="test-case" data-status="${caseOutcome}"><summary><span class="case-header"><span class="case-title"><span class="case-id">${escapeHtml(testId)}</span>${escapeHtml(scenarioName)}</span><span class="status ${caseOutcome}">${resultLabel}</span><span class="duration">${formatDuration(row.duration)}</span><span class="chevron" aria-hidden="true"></span></span></summary><div class="case-body"><p class="tags">${escapeHtml(row.tags.join(", "))}</p><div class="result-grid"><section class="result-box"><h3>Expected Result</h3><p>${escapeHtml(scenario.expected)}</p></section><section class="result-box"><h3>Actual Result</h3><p>${escapeHtml(scenario.actual).replace(/\r?\n/g, "<br>")}</p></section></div><div class="table-scroll"><table class="business-steps"><thead><tr><th>Step</th><th>Execution Step</th><th>Expected Result</th><th>Actual Result</th><th>Status</th></tr></thead><tbody>${steps}</tbody></table></div>${componentsTechnical}${technical}${comparisonTable}${validation}${history}${details}${attentionSection}${evidenceSection}</div></details>`;
 }
@@ -1464,6 +1474,7 @@ function getFailedStepTitles(steps: TestResult["steps"]): string[] {
 
 function moduleNameForSpec(specName: string): string {
   if (/components/i.test(specName)) return "Components";
+  if (/running[-_ ]?hours/i.test(specName)) return "Running Hours";
   if (/jobs?/i.test(specName)) return "Jobs";
   if (/spares?/i.test(specName)) return "Spares";
   if (/stores?/i.test(specName)) return "Stores";
@@ -1589,14 +1600,14 @@ function scenarioExecutionForRows(
   if (runtimeText.includes(config.automationUser2Username)) users.add(config.automationUser2Username);
   const vessels = new Set<string>();
   for (const vessel of [config.vesselName, config.vesselA, config.vesselB, config.emptyVessel]) if (runtimeText.includes(vessel)) vessels.add(vessel);
-  if (moduleFolder === "components") {
+  if (usesScenarioReport(moduleFolder)) {
     const report = buildComponentsReport(rows);
     const auditStatus = (status: ComponentsStatus) => status;
     const componentVessels = runtimeVessels(rows);
     const componentCases = rows.map((row, index) => {
       const item = report.cases[index];
       return {
-        id: row.title.match(/\b[A-Z]+-\d+\b/)?.[0] ?? "—",
+        id: row.title.match(TEST_CASE_ID)?.[0] ?? "—",
         name: row.title,
         status: ({ passed: "PASSED", failed: "FAILED", skipped: "SKIPPED", "not-executed": "NOT EXECUTED" } as const)[classifyCaseOutcome(row.status, row.expectedStatus, row.annotations.some(Boolean), row.annotations.at(-1))],
         expected: item.scenario.expected,
@@ -1617,7 +1628,7 @@ function scenarioExecutionForRows(
     const skippedCount = componentCases.filter((item) => item.status === "SKIPPED").length;
     const notExecutedCount = componentCases.filter((item) => item.status === "NOT EXECUTED").length;
     return {
-      module: "Components",
+      module: moduleFolder === "components" ? "Components" : moduleFolder.split("-").map((part) => part[0]?.toUpperCase() + part.slice(1)).join(" "),
       specName,
       users: [...users],
       vessels: componentVessels.length ? componentVessels : [...vessels],
@@ -1644,7 +1655,7 @@ function scenarioExecutionForRows(
   const commonSetupKeys = new Set<string>();
   let initialLoginRecorded = false;
   const testCases = rows.map((row) => ({
-    id: row.title.match(/\b[A-Z]+-\d+\b/)?.[0] ?? "—",
+    id: row.title.match(TEST_CASE_ID)?.[0] ?? "—",
     name: row.title,
     status: ({ passed: "PASSED", failed: "FAILED", skipped: "SKIPPED", "not-executed": "NOT EXECUTED" } as const)[classifyCaseOutcome(row.status, row.expectedStatus, row.annotations.some(Boolean), row.annotations.at(-1))],
     durationMs: row.duration,
@@ -1778,7 +1789,7 @@ function ensureAuditReport(
               : "FAIL") as "PASS" | "FAIL" | "NOT RUN",
         };
       });
-      const id = row.title.match(/\b[A-Z]+-\d+\b/)?.[0] ?? "—";
+      const id = row.title.match(TEST_CASE_ID)?.[0] ?? "—";
       return {
         id,
         name: row.title,

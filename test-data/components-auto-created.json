@@ -9290,9 +9290,9 @@
     "testCaseId": "CMP-124",
     "runId": "2026-10-23T17:22:51.225Z-ba2ebcb4",
     "createdAt": "2026-10-23T17:24:00.041Z",
-    "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:52:30.615Z",
-    "cleanupResult": "Component AT124-FB1649 deletion should succeed\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m"
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T09:47:16.284Z",
+    "cleanupResult": "1 exact tracked record(s) were deleted and absence was verified."
   },
   {
     "code": "AT125-FB1649",
@@ -9304,8 +9304,8 @@
     "runId": "2026-10-23T17:22:51.225Z-ba2ebcb4",
     "createdAt": "2026-10-23T17:24:22.890Z",
     "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:52:47.286Z",
-    "cleanupResult": "Component AT125-FB1649 deletion should succeed\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m"
+    "cleanupAttemptedAt": "2026-11-05T09:55:12.656Z",
+    "cleanupResult": "Component AT125-FB1649 has 2 linked Job(s), but 1 lack exact cleanup authorization: ATJ131-FB1649 (CMP131 Duplicate WO FB1649). No linked Job was deleted."
   },
   {
     "code": "AT030-7AEC",
@@ -9407,9 +9407,9 @@
     "testCaseId": "CMP-124",
     "runId": "2026-10-28T02:20:25.073Z-a6b92520",
     "createdAt": "2026-10-28T02:49:56.920Z",
-    "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:55:23.110Z",
-    "cleanupResult": "Component AT124-F7D2D2 deletion should succeed\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m"
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T09:48:26.938Z",
+    "cleanupResult": "1 exact tracked record(s) were deleted and absence was verified."
   },
   {
     "code": "AT125-F7D2D2",
@@ -9420,9 +9420,9 @@
     "testCaseId": "CMP-125",
     "runId": "2026-10-28T02:20:25.073Z-a6b92520",
     "createdAt": "2026-10-28T02:50:23.579Z",
-    "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:56:18.493Z",
-    "cleanupResult": "The Components search should hold \"\"\n\n\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\nExpected: \u001b[32m\"\"\u001b[39m\nReceived: \u001b[31m\"AT124-F7D2D2\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - The Components search should hold \"\" getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\u001b[22m\n\u001b[2m    33 × locator resolved to <input value=\"AT124-F7D2D2\" placeholder=\"Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...\" class=\"flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm pl-10\"/>\u001b[22m\n\u001b[2m       - unexpected value \"AT124-F7D2D2\"\u001b[22m\n"
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T09:49:16.311Z",
+    "cleanupResult": "1 exact tracked record(s) were deleted and absence was verified."
   },
   {
     "code": "AT047-ECE6",
@@ -9589,9 +9589,9 @@
     "testCaseId": "CMP-061",
     "runId": "2026-10-28T04:37:51.472Z-e299b911",
     "createdAt": "2026-10-28T04:39:04.360Z",
-    "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:25:26.977Z",
-    "cleanupResult": "2 exact-code row(s) remain, but none match the tracked name \"Test CMP061 381B User B\". They were not deleted."
+    "cleanupStatus": "already_absent",
+    "cleanupAttemptedAt": "2026-11-05T08:34:28.512Z",
+    "cleanupResult": "Exact vessel-and-code search confirmed the component is absent."
   },
   {
     "code": "ATROT-C474BA",
@@ -9628,7 +9628,9 @@
     "testCaseId": "CMP-178",
     "runId": "cmp-lifecycle-sail-components-auth-3464-json",
     "createdAt": "2026-11-03T08:58:23.336Z",
-    "cleanupStatus": "pending"
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T08:35:31.708Z",
+    "cleanupResult": "1 exact tracked record(s) were deleted and absence was verified."
   },
   {
     "code": "ATLC180-174740",
@@ -10328,9 +10330,9 @@
     "testCaseId": "CMP-061",
     "runId": "2026-11-04T10:08:03.972Z-c14c8766",
     "createdAt": "2026-11-04T10:09:14.343Z",
-    "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:28:37.723Z",
-    "cleanupResult": "3 exact-code row(s) remain, but none match the tracked name \"Test CMP061 0758 User B\". They were not deleted."
+    "cleanupStatus": "already_absent",
+    "cleanupAttemptedAt": "2026-11-05T08:34:30.608Z",
+    "cleanupResult": "Exact vessel-and-code search confirmed the component is absent."
   },
   {
     "code": "AT030-08BA",
@@ -10601,7 +10603,9 @@
     "testCaseId": "CMP-124",
     "runId": "2026-11-04T11:18:22.784Z-1ae14df8",
     "createdAt": "2026-11-04T11:20:03.415Z",
-    "cleanupStatus": "pending"
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T09:50:01.433Z",
+    "cleanupResult": "1 exact tracked record(s) were deleted and absence was verified."
   },
   {
     "code": "AT125-9E47A9",
@@ -10612,7 +10616,9 @@
     "testCaseId": "CMP-125",
     "runId": "2026-11-04T11:18:22.784Z-1ae14df8",
     "createdAt": "2026-11-04T11:20:30.954Z",
-    "cleanupStatus": "pending"
+    "cleanupStatus": "already_absent",
+    "cleanupAttemptedAt": "2026-11-05T08:36:09.989Z",
+    "cleanupResult": "Exact vessel-and-code search confirmed the component is absent."
   },
   {
     "code": "AT124-996BA1",
@@ -10623,7 +10629,9 @@
     "testCaseId": "CMP-124",
     "runId": "2026-11-04T11:29:41.933Z-3ce8e4f0",
     "createdAt": "2026-11-04T11:31:02.625Z",
-    "cleanupStatus": "pending"
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T08:36:18.789Z",
+    "cleanupResult": "1 exact tracked record(s) were deleted and absence was verified."
   },
   {
     "code": "AT090-MW22HIO9C442",
@@ -10985,9 +10993,9 @@
     "testCaseId": "CMP-061",
     "runId": "2026-11-04T13:25:52.515Z-0aa82cac",
     "createdAt": "2026-11-04T13:26:46.295Z",
-    "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:32:38.034Z",
-    "cleanupResult": "Component AT061-4F06 deletion should succeed\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m"
+    "cleanupStatus": "already_absent",
+    "cleanupAttemptedAt": "2026-11-05T08:34:32.730Z",
+    "cleanupResult": "Exact vessel-and-code search confirmed the component is absent."
   },
   {
     "code": "ATROT-ECFB8C",
@@ -10998,9 +11006,9 @@
     "testCaseId": "CMP-109-CMP-115",
     "runId": "cmp-rotation-sail-components-auth-26008-json",
     "createdAt": "2026-11-04T13:31:29.401Z",
-    "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:33:32.872Z",
-    "cleanupResult": "The Components search should hold \"\"\n\n\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\nExpected: \u001b[32m\"\"\u001b[39m\nReceived: \u001b[31m\"AT061-4F06\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - The Components search should hold \"\" getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\u001b[22m\n\u001b[2m    33 × locator resolved to <input value=\"AT061-4F06\" placeholder=\"Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...\" class=\"flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm pl-10\"/>\u001b[22m\n\u001b[2m       - unexpected value \"AT061-4F06\"\u001b[22m\n"
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T08:34:40.915Z",
+    "cleanupResult": "1 exact tracked record(s) were deleted and absence was verified."
   },
   {
     "code": "ATROT-044C79",
@@ -11011,9 +11019,9 @@
     "testCaseId": "CMP-109-CMP-115",
     "runId": "cmp-rotation-sail-components-auth-27584-json",
     "createdAt": "2026-11-04T13:34:04.475Z",
-    "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:34:27.681Z",
-    "cleanupResult": "The Components search should hold \"\"\n\n\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\nExpected: \u001b[32m\"\"\u001b[39m\nReceived: \u001b[31m\"AT061-4F06\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - The Components search should hold \"\" getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\u001b[22m\n\u001b[2m    33 × locator resolved to <input value=\"AT061-4F06\" placeholder=\"Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...\" class=\"flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm pl-10\"/>\u001b[22m\n\u001b[2m       - unexpected value \"AT061-4F06\"\u001b[22m\n"
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T08:34:48.668Z",
+    "cleanupResult": "1 exact tracked record(s) were deleted and absence was verified."
   },
   {
     "code": "ATROT-A86602",
@@ -11024,9 +11032,9 @@
     "testCaseId": "CMP-109-CMP-115",
     "runId": "cmp-rotation-sail-components-auth-12580-json",
     "createdAt": "2026-11-04T13:40:00.630Z",
-    "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:35:22.640Z",
-    "cleanupResult": "The Components search should hold \"\"\n\n\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\nExpected: \u001b[32m\"\"\u001b[39m\nReceived: \u001b[31m\"AT061-4F06\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - The Components search should hold \"\" getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\u001b[22m\n\u001b[2m    33 × locator resolved to <input value=\"AT061-4F06\" placeholder=\"Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...\" class=\"flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm pl-10\"/>\u001b[22m\n\u001b[2m       - unexpected value \"AT061-4F06\"\u001b[22m\n"
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T08:34:56.514Z",
+    "cleanupResult": "1 exact tracked record(s) were deleted and absence was verified."
   },
   {
     "code": "AT047-BFCD",
@@ -11063,9 +11071,9 @@
     "testCaseId": "CMP-051",
     "runId": "2026-11-04T15:33:45.166Z-fe94dfc1",
     "createdAt": "2026-11-04T15:36:45.524Z",
-    "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:36:17.554Z",
-    "cleanupResult": "The Components search should hold \"\"\n\n\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\nExpected: \u001b[32m\"\"\u001b[39m\nReceived: \u001b[31m\"AT061-4F06\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - The Components search should hold \"\" getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\u001b[22m\n\u001b[2m    33 × locator resolved to <input value=\"AT061-4F06\" placeholder=\"Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...\" class=\"flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm pl-10\"/>\u001b[22m\n\u001b[2m       - unexpected value \"AT061-4F06\"\u001b[22m\n"
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T08:35:03.691Z",
+    "cleanupResult": "1 exact tracked record(s) were deleted and absence was verified."
   },
   {
     "code": "AT052-9AE1",
@@ -11076,9 +11084,9 @@
     "testCaseId": "CMP-052",
     "runId": "2026-11-04T15:33:45.166Z-fe94dfc1",
     "createdAt": "2026-11-04T15:36:59.967Z",
-    "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:37:12.551Z",
-    "cleanupResult": "The Components search should hold \"\"\n\n\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\nExpected: \u001b[32m\"\"\u001b[39m\nReceived: \u001b[31m\"AT061-4F06\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - The Components search should hold \"\" getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\u001b[22m\n\u001b[2m    33 × locator resolved to <input value=\"AT061-4F06\" placeholder=\"Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...\" class=\"flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm pl-10\"/>\u001b[22m\n\u001b[2m       - unexpected value \"AT061-4F06\"\u001b[22m\n"
+    "cleanupStatus": "already_absent",
+    "cleanupAttemptedAt": "2026-11-05T08:35:05.592Z",
+    "cleanupResult": "Exact vessel-and-code search confirmed the component is absent."
   },
   {
     "code": "AT054-3638",
@@ -11089,9 +11097,9 @@
     "testCaseId": "CMP-054",
     "runId": "2026-11-04T15:33:45.166Z-fe94dfc1",
     "createdAt": "2026-11-04T15:37:51.748Z",
-    "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:38:07.442Z",
-    "cleanupResult": "The Components search should hold \"\"\n\n\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\nExpected: \u001b[32m\"\"\u001b[39m\nReceived: \u001b[31m\"AT061-4F06\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - The Components search should hold \"\" getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\u001b[22m\n\u001b[2m    33 × locator resolved to <input value=\"AT061-4F06\" placeholder=\"Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...\" class=\"flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm pl-10\"/>\u001b[22m\n\u001b[2m       - unexpected value \"AT061-4F06\"\u001b[22m\n"
+    "cleanupStatus": "already_absent",
+    "cleanupAttemptedAt": "2026-11-05T08:35:07.588Z",
+    "cleanupResult": "Exact vessel-and-code search confirmed the component is absent."
   },
   {
     "code": "AT055-3808",
@@ -11102,9 +11110,9 @@
     "testCaseId": "CMP-055",
     "runId": "2026-11-04T15:33:45.166Z-fe94dfc1",
     "createdAt": "2026-11-04T15:38:31.609Z",
-    "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:39:02.309Z",
-    "cleanupResult": "The Components search should hold \"\"\n\n\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\nExpected: \u001b[32m\"\"\u001b[39m\nReceived: \u001b[31m\"AT061-4F06\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - The Components search should hold \"\" getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\u001b[22m\n\u001b[2m    33 × locator resolved to <input value=\"AT061-4F06\" placeholder=\"Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...\" class=\"flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm pl-10\"/>\u001b[22m\n\u001b[2m       - unexpected value \"AT061-4F06\"\u001b[22m\n"
+    "cleanupStatus": "already_absent",
+    "cleanupAttemptedAt": "2026-11-05T08:35:09.574Z",
+    "cleanupResult": "Exact vessel-and-code search confirmed the component is absent."
   },
   {
     "code": "27.843",
@@ -11128,9 +11136,9 @@
     "testCaseId": "CMP-059",
     "runId": "2026-11-04T15:33:45.166Z-fe94dfc1",
     "createdAt": "2026-11-04T15:40:40.831Z",
-    "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:39:57.104Z",
-    "cleanupResult": "The Components search should hold \"\"\n\n\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\nExpected: \u001b[32m\"\"\u001b[39m\nReceived: \u001b[31m\"AT061-4F06\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - The Components search should hold \"\" getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\u001b[22m\n\u001b[2m    33 × locator resolved to <input value=\"AT061-4F06\" placeholder=\"Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...\" class=\"flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm pl-10\"/>\u001b[22m\n\u001b[2m       - unexpected value \"AT061-4F06\"\u001b[22m\n"
+    "cleanupStatus": "already_absent",
+    "cleanupAttemptedAt": "2026-11-05T08:35:11.627Z",
+    "cleanupResult": "Exact vessel-and-code search confirmed the component is absent."
   },
   {
     "code": "26.767.743",
@@ -11167,8 +11175,155 @@
     "testCaseId": "CMP-061",
     "runId": "2026-11-04T15:43:07.161Z-a12c8458",
     "createdAt": "2026-11-04T15:44:06.301Z",
+    "cleanupStatus": "already_absent",
+    "cleanupAttemptedAt": "2026-11-05T08:35:13.743Z",
+    "cleanupResult": "Exact vessel-and-code search confirmed the component is absent."
+  },
+  {
+    "code": "AT124-376842",
+    "name": "CMP124 Jobs 376842",
+    "vessel": "AUTO_VESSEL_004",
+    "parentCode": "8",
+    "sourceSpec": "components-linked-jobs-work-orders.spec.ts",
+    "testCaseId": "CMP-124",
+    "runId": "2026-11-05T04:28:32.841Z-02799ee2",
+    "createdAt": "2026-11-05T04:29:49.060Z",
+    "cleanupStatus": "already_absent",
+    "generatedWorkOrders": [
+      {
+        "workOrderNumber": "V073-ATJ126-6DC44E-AT124-376842-2026-001",
+        "status": "Active",
+        "jobCode": "ATJ126-6DC44E",
+        "jobTitle": "CMP126 Work Order Job 6DC44E",
+        "createdAt": "2026-11-05T05:48:53.336Z"
+      },
+      {
+        "workOrderNumber": "V073-ATJ126-31758A-AT124-376842-2026-001",
+        "status": "Active",
+        "jobCode": "ATJ126-31758A",
+        "jobTitle": "CMP126 Work Order Job 31758A",
+        "createdAt": "2026-11-05T05:56:13.309Z"
+      }
+    ],
+    "cleanupAttemptedAt": "2026-11-05T06:37:37.085Z",
+    "cleanupResult": "Exact vessel-and-code search confirmed the component is absent."
+  },
+  {
+    "code": "AT082-MW32FENFFD80",
+    "name": "Test CMP082 MW32FENFFD80",
+    "vessel": "AUTO_VESSEL_001",
+    "parentCode": "1",
+    "sourceSpec": "components-edit-and-persistence.spec.ts",
+    "testCaseId": "CMP-082-CMP-092 shared preparation",
+    "runId": "cmp082-cmp092-MW32FENFFD80",
+    "createdAt": "2026-11-05T04:48:49.302Z",
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T08:35:22.258Z",
+    "cleanupResult": "1 exact tracked record(s) were deleted and absence was verified."
+  },
+  {
+    "code": "AT090-MW32IZJZ9239",
+    "name": "CMP-090 disposable MW32IZJZ9239",
+    "vessel": "AUTO_VESSEL_001",
+    "parentCode": "1",
+    "sourceSpec": "components-edit-and-persistence.spec.ts",
+    "testCaseId": "CMP-090",
+    "runId": "cmp-090-MW32IZJZ9239",
+    "createdAt": "2026-11-05T04:51:35.379Z",
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T04:52:37.343Z",
+    "cleanupResult": "Notification Component deletedComponent deleted successfully. Existing Work Orders and maintenance history have been retained."
+  },
+  {
+    "code": "AT090-MW338OSR124C",
+    "name": "CMP-090 disposable MW338OSR124C",
+    "vessel": "AUTO_VESSEL_001",
+    "parentCode": "1",
+    "sourceSpec": "components-edit-and-persistence.spec.ts",
+    "testCaseId": "CMP-090",
+    "runId": "cmp-090-MW338OSR124C",
+    "createdAt": "2026-11-05T05:11:35.509Z",
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T05:12:39.391Z",
+    "cleanupResult": "Notification Component deletedComponent deleted successfully. Existing Work Orders and maintenance history have been retained."
+  },
+  {
+    "code": "AT124-4BA0B8",
+    "name": "CMP124 Jobs 4BA0B8",
+    "vessel": "AUTO_VESSEL_004",
+    "parentCode": "8",
+    "sourceSpec": "components-linked-jobs-work-orders.spec.ts",
+    "testCaseId": "CMP-124",
+    "runId": "2026-11-05T06:43:12.899Z-ea6829d2",
+    "createdAt": "2026-11-05T06:45:00.269Z",
     "cleanupStatus": "failed",
-    "cleanupAttemptedAt": "2026-11-04T16:40:51.982Z",
-    "cleanupResult": "The Components search should hold \"\"\n\n\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\nExpected: \u001b[32m\"\"\u001b[39m\nReceived: \u001b[31m\"AT061-4F06\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - The Components search should hold \"\" getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByPlaceholder('Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...')\u001b[22m\n\u001b[2m    33 × locator resolved to <input value=\"AT061-4F06\" placeholder=\"Search by Name, SFI Code, Fleet Equipment Code, Maker, or Se...\" class=\"flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm pl-10\"/>\u001b[22m\n\u001b[2m       - unexpected value \"AT061-4F06\"\u001b[22m\n"
+    "generatedWorkOrders": [
+      {
+        "workOrderNumber": "V073-ATJ126-8B47E4-AT124-4BA0B8-2026-001",
+        "status": "Active",
+        "jobCode": "ATJ126-8B47E4",
+        "jobTitle": "CMP126 Work Order Job 8B47E4",
+        "createdAt": "2026-11-05T06:47:36.281Z"
+      }
+    ],
+    "cleanupAttemptedAt": "2026-11-05T09:55:30.771Z",
+    "cleanupResult": "Component AT124-4BA0B8 has 2 linked Job(s), but 1 lack exact cleanup authorization: ATJ131-6C2A3A (CMP131 Duplicate WO 6C2A3A). No linked Job was deleted."
+  },
+  {
+    "code": "AT125-CA5F91",
+    "name": "CMP125 Save Add Job CA5F91",
+    "vessel": "AUTO_VESSEL_004",
+    "parentCode": "8",
+    "sourceSpec": "components-linked-jobs-work-orders.spec.ts",
+    "testCaseId": "CMP-125",
+    "runId": "2026-11-05T07:14:45.818Z-e02a033f",
+    "createdAt": "2026-11-05T07:15:28.169Z",
+    "cleanupStatus": "already_absent",
+    "generatedWorkOrders": [
+      {
+        "workOrderNumber": "V073-ATJ126-8CC1EA-AT125-CA5F91-2026-001",
+        "status": "Active",
+        "jobCode": "ATJ126-8CC1EA",
+        "jobTitle": "CMP126 Work Order Job 8CC1EA",
+        "createdAt": "2026-11-05T07:17:01.516Z"
+      }
+    ],
+    "cleanupAttemptedAt": "2026-11-05T08:36:49.186Z",
+    "cleanupResult": "Exact vessel-and-code search confirmed the component is absent."
+  },
+  {
+    "code": "AT128-CA5F91",
+    "name": "CMP128 Delete Job Host CA5F91",
+    "vessel": "AUTO_VESSEL_004",
+    "parentCode": "8",
+    "sourceSpec": "components-linked-jobs-work-orders.spec.ts",
+    "testCaseId": "CMP-128",
+    "runId": "2026-11-05T07:14:45.818Z-e02a033f",
+    "createdAt": "2026-11-05T07:17:19.036Z",
+    "cleanupStatus": "deleted",
+    "cleanupAttemptedAt": "2026-11-05T08:36:58.752Z",
+    "cleanupResult": "1 exact tracked record(s) were deleted and absence was verified."
+  },
+  {
+    "code": "AT124-F57AB0",
+    "name": "CMP124 Jobs F57AB0",
+    "vessel": "AUTO_VESSEL_004",
+    "parentCode": "8",
+    "sourceSpec": "components-linked-jobs-work-orders.spec.ts",
+    "testCaseId": "CMP-124",
+    "runId": "2026-11-05T08:13:43.828Z-1f01f26a",
+    "createdAt": "2026-11-05T08:15:13.896Z",
+    "cleanupStatus": "failed",
+    "generatedWorkOrders": [
+      {
+        "workOrderNumber": "V073-ATJ126-6AC453-AT124-F57AB0-2026-001",
+        "status": "Active",
+        "jobCode": "ATJ126-6AC453",
+        "jobTitle": "CMP126 Work Order Job 6AC453",
+        "createdAt": "2026-11-05T08:16:56.535Z"
+      }
+    ],
+    "cleanupAttemptedAt": "2026-11-05T09:55:50.785Z",
+    "cleanupResult": "Component AT124-F57AB0 has 3 linked Job(s), but 1 lack exact cleanup authorization: ATJ131-F57AB0 (CMP131 Duplicate WO F57AB0). No linked Job was deleted."
   }
 ]

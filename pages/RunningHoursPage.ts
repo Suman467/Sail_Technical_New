@@ -14,6 +14,25 @@ export type RunningHoursUiRow = {
   inheritedRh: string;
 };
 
+/** One Running Hours grid row read by column id, including its Last Updated value. */
+export type RunningHoursGridRow = {
+  rowIndex: number;
+  componentName: string;
+  componentCode: string;
+  componentCategory: string;
+  runningHours: string;
+  lastUpdated: string;
+  inheritedRh: string;
+};
+
+/** The Running Hours footer: "Showing N components" or, while filtered, "Showing N of T components". */
+export type RunningHoursCount = { shown: number; total: number; text: string };
+
+/** The rows and footer count shown after a Running Hours component search settles. */
+export type RunningHoursSearchResult = RunningHoursCount & { rows: RunningHoursGridRow[] };
+
+const COMPONENT_COUNT = /^Showing\s+([\d,]+)(?:\s+of\s+([\d,]+))?\s+components?$/;
+
 /**
  * Models the Running Hours overview screen in the Technical > PMS module.
  * The page reads the rendered grid only; it does not call application APIs.
@@ -27,6 +46,8 @@ export class RunningHoursPage extends BasePage {
   private readonly overviewTab: Locator;
   private readonly runningHoursTable: Locator;
   private readonly overviewDataRows: Locator;
+  private readonly componentSearchField: Locator;
+  private readonly componentCount: Locator;
 
   public constructor(page: Page) {
     super(page);
@@ -47,6 +68,166 @@ export class RunningHoursPage extends BasePage {
     this.overviewDataRows = this.runningHoursTable.locator(
       '[role="row"]:has([role="cell"], [role="gridcell"], td)',
     );
+    this.componentSearchField = page.getByPlaceholder('Search Component', { exact: true });
+    this.componentCount = page.getByText(COMPONENT_COUNT);
+  }
+
+  /** Waits for the Running Hours heading without recording a report step. */
+  public async waitForScreen(): Promise<void> {
+    await expect(this.page, 'The Running Hours page should open').toHaveURL(new RegExp(`${routes.runningHours}(?:[?#]|$)`));
+    await expect(this.pageLoadedIndicator, 'The Running Hours heading should be displayed').toBeVisible();
+  }
+
+  /** Returns the vessel currently shown in the Running Hours vessel selector once it has hydrated. */
+  public async selectedVesselName(): Promise<string> {
+    // Other PMS pages use the same selector position; never read or change theirs.
+    await this.waitForScreen();
+    let selected = '';
+    await expect.poll(async () => {
+      selected = (await this.vesselDropdown.textContent())?.trim() ?? '';
+      return selected;
+    }, { message: 'The Running Hours vessel selection should finish loading' }).not.toMatch(/^(?:select\s+vessel)?$/i);
+    return selected;
+  }
+
+  /** Reads the vessel names offered by the selector and closes it again. */
+  public async vesselOptions(): Promise<string[]> {
+    await this.waitForScreen();
+    await this.vesselDropdown.click();
+    const options = this.page.getByRole('option');
+    await expect(options.first(), 'The Running Hours vessel list should open').toBeVisible();
+    const names = (await options.allInnerTexts()).map((name) => name.trim()).filter(Boolean);
+    await this.page.keyboard.press('Escape');
+    await expect(options.first(), 'The Running Hours vessel list should close').toBeHidden();
+    return names;
+  }
+
+  /**
+   * Selects a vessel only when it is not already selected (returns undefined
+   * then). The application requests a vessel's Running Hours only the first
+   * time in a session and reuses that data afterwards, so the request is
+   * awaited when it is made and its occurrence is returned.
+   */
+  public async selectVesselAndWaitForData(name: string): Promise<{ requested: boolean } | undefined> {
+    if (await this.selectedVesselName() === name) return undefined;
+    await this.vesselDropdown.click();
+    const option = this.page.getByRole('option', { name, exact: true });
+    await expect(option, `Vessel ${name} should be offered in the Running Hours vessel list`).toBeVisible();
+    const request = this.page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/technical/api/running-hours/parents')
+      && response.request().method() === 'GET', { timeout: 5_000 }).then((response) => response, () => undefined);
+    await option.click();
+    const response = await request;
+    expect(response?.ok() ?? true, `The Running Hours data request for Vessel ${name} should succeed`).toBe(true);
+    await expect(this.vesselDropdown, `Vessel ${name} should be selected in Running Hours`).toHaveText(name);
+    return { requested: Boolean(response) };
+  }
+
+  /**
+   * Reads every Running Hours row by column id. The grid renders only the rows
+   * in view, so its own scrolling body is scrolled from top to bottom and each
+   * row is collected once by its row index.
+   */
+  public async readAllRows(): Promise<RunningHoursGridRow[]> {
+    const viewport = this.runningHoursTable.locator('.ag-body-viewport').first();
+    const rows = new Map<number, RunningHoursGridRow>();
+    const readRendered = () => this.runningHoursTable.evaluate((grid) => {
+      const byIndex = new Map<number, Record<string, string>>();
+      for (const row of Array.from(grid.querySelectorAll('[role="row"][row-index]'))) {
+        const index = Number(row.getAttribute('row-index'));
+        const cells = byIndex.get(index) ?? {};
+        // Pinned columns render a row's cells in separate row elements with the same index.
+        for (const cell of Array.from(row.querySelectorAll('[role="gridcell"][col-id]'))) {
+          cells[cell.getAttribute('col-id') ?? ''] = (cell.textContent ?? '').replace(/\s+/g, ' ').trim();
+        }
+        byIndex.set(index, cells);
+      }
+      return [...byIndex.entries()];
+    });
+    const position = () => viewport.evaluate((node) => ({ top: node.scrollTop, height: node.clientHeight, total: node.scrollHeight }));
+
+    const collect = async () => {
+      for (const [rowIndex, cells] of await readRendered()) {
+        rows.set(rowIndex, {
+          rowIndex,
+          componentName: cells.component ?? '',
+          componentCode: cells.sfiCode ?? '',
+          componentCategory: cells.componentCategory ?? '',
+          runningHours: cells.runningHours ?? '',
+          lastUpdated: cells.lastUpdated ?? '',
+          inheritedRh: cells.inheritedCount ?? '',
+        });
+      }
+    };
+
+    if (!(await viewport.count())) {
+      await collect();
+      return [...rows.values()].sort((first, second) => first.rowIndex - second.rowIndex);
+    }
+    // aria-rowcount counts the header row as well as every (filtered) data row.
+    const declared = Number(await this.runningHoursTable.getAttribute('aria-rowcount')) - 1;
+    const expected = Number.isFinite(declared) && declared >= 0 ? declared : undefined;
+    const complete = () => expected !== undefined && rows.size >= expected;
+    await viewport.evaluate((node) => { node.scrollTop = 0; });
+    for (let pass = 0; pass < 200; pass += 1) {
+      await collect();
+      const { top, height, total } = await position();
+      if (complete() || top + height >= total - 1) break;
+      const seen = rows.size;
+      await viewport.evaluate((node) => { node.scrollTop += Math.max(node.clientHeight * 0.8, 1); });
+      // Wait for rows the grid says exist below to render, rather than a fixed delay.
+      await expect.poll(async () => {
+        await collect();
+        const now = await position();
+        return rows.size > seen || complete() || now.top + now.height >= now.total - 1;
+      }, { message: 'The next Running Hours rows should render while scrolling', timeout: 10_000 }).toBe(true);
+    }
+    await viewport.evaluate((node) => { node.scrollTop = 0; });
+    return [...rows.values()].sort((first, second) => first.rowIndex - second.rowIndex);
+  }
+
+  /** Waits until the footer count has stayed unchanged for a moment and returns it. */
+  public async readComponentCount(): Promise<RunningHoursCount> {
+    let last = '';
+    let since = Date.now();
+    await expect.poll(async () => {
+      const text = (await this.componentCount.first().innerText().catch(() => '')).trim();
+      if (text !== last) {
+        last = text;
+        since = Date.now();
+      }
+      return Boolean(last) && Date.now() - since >= 1_500;
+    }, { message: 'The Running Hours component count should finish loading', timeout: 30_000, intervals: [100, 250, 500] }).toBe(true);
+    const match = COMPONENT_COUNT.exec(last)!;
+    const shown = Number(match[1].replace(/,/g, ''));
+    return { shown, total: match[2] ? Number(match[2].replace(/,/g, '')) : shown, text: last };
+  }
+
+  /**
+   * Types a search term and waits for the filtered table to settle: the
+   * displayed rows all contain the term, or the footer reports none.
+   */
+  public async searchComponents(term: string): Promise<RunningHoursSearchResult> {
+    await expect(this.componentSearchField, 'The Running Hours component search should be available').toBeVisible();
+    await this.componentSearchField.fill(term);
+    await expect(this.componentSearchField).toHaveValue(term);
+    const lowerTerm = term.toLowerCase();
+    await expect.poll(async () => {
+      const text = (await this.componentCount.first().innerText().catch(() => '')).trim();
+      if (/^Showing\s+0\b/.test(text)) return true;
+      const names = await this.overviewDataRows.evaluateAll((rows) =>
+        rows.map((row) => row.querySelector('[role="gridcell"], [role="cell"], td')?.textContent ?? ''));
+      return names.length > 0 && names.every((name) => name.toLowerCase().includes(lowerTerm));
+    }, { message: `The Running Hours search for "${term}" should finish filtering`, timeout: 15_000 }).toBe(true);
+    const count = await this.readComponentCount();
+    return { ...count, rows: await this.readAllRows() };
+  }
+
+  /** Clears the component search and returns the settled, unfiltered count. */
+  public async clearComponentSearch(): Promise<RunningHoursCount> {
+    await this.componentSearchField.fill('');
+    await expect(this.componentSearchField).toHaveValue('');
+    await expect(this.componentCount.first(), 'The unfiltered Running Hours count should return').not.toContainText(' of ');
+    return this.readComponentCount();
   }
 
   /**

@@ -555,6 +555,17 @@ export class ComponentsPage extends BasePage {
     await expect(this.componentDetailsArea, 'The component details area should be displayed').toBeVisible();
   }
 
+  /** Returns the vessel the Components selector shows once it has hydrated. */
+  public async currentVesselName(): Promise<string> {
+    await expect(this.pageLoadedIndicator, 'The Components page should be ready before its vessel is read').toBeVisible();
+    let selected = '';
+    await expect.poll(async () => {
+      selected = (await this.vesselDropdown.textContent())?.trim() ?? '';
+      return selected;
+    }, { message: 'The Components vessel selection should finish loading' }).not.toMatch(/^(?:select\s+vessel)?$/i);
+    return selected;
+  }
+
   /** Confirms the vessel retained by navigation or refresh without assuming details-panel state. */
   public async expectVesselSelected(vesselName: string): Promise<void> {
     await expect(this.vesselDropdown, `Vessel ${vesselName} should remain selected`).toContainText(vesselName);
@@ -791,18 +802,48 @@ export class ComponentsPage extends BasePage {
             return selectedIdentity;
           }
         }
+        // Wait for real tree readiness. A filtered tree that is no longer busy
+        // and keeps the same rows for two seconds without the target or any
+        // collapsed branch is a settled search result, not a loading state.
+        let settledTree: string | undefined;
+        let settledSince = 0;
+        let notFound = false;
         await expect
           .poll(
-            async () =>
-              await matchingRow.isVisible().catch(() => false) ||
-              await collapsedControl.isVisible().catch(() => false) ||
-              await this.selectedComponentIsVisible(normalizedCode),
+            async () => {
+              if (
+                await matchingRow.isVisible().catch(() => false) ||
+                await collapsedControl.isVisible().catch(() => false) ||
+                await this.selectedComponentIsVisible(normalizedCode)
+              ) return true;
+              if (await this.page.getByTestId('B6').locator('[aria-busy="true"]').count()) {
+                settledTree = undefined;
+                return false;
+              }
+              const currentTree = (await this.componentRows.allInnerTexts()).join('\n');
+              if (currentTree !== settledTree) {
+                settledTree = currentTree;
+                settledSince = Date.now();
+                return false;
+              }
+              notFound = Date.now() - settledSince >= 2_000;
+              return notFound;
+            },
             {
               message: `The vessel tree should finish loading while locating Component ${normalizedCode}`,
               timeout: 30_000,
+              intervals: [250, 500],
             },
           )
           .toBe(true);
+        if (notFound) {
+          const vessel = (await this.vesselDropdown.textContent())?.trim() || 'the selected vessel';
+          const visibleRows = (await this.componentRows.allInnerTexts()).map((text) => text.replace(/\s+/g, ' ').trim());
+          throw new Error(
+            `Component ${normalizedCode} is not present in ${vessel}: the Components search for "${normalizedCode}" finished loading and `
+            + (visibleRows.length ? `showed only ${visibleRows.join(', ')}, with no further branch to expand.` : 'returned no matching components.'),
+          );
+        }
         continue;
       }
 
@@ -1342,7 +1383,7 @@ export class ComponentsPage extends BasePage {
     }
     await expect(button, 'D. Jobs should expose the available Add Job action').toBeVisible();
     await button.click();
-    const form = new JobFormPage(this.page);
+    const form = new JobFormPage(this.page, await this.currentVesselName());
     await expect(this.page.getByRole('heading', { name: 'Job Form', exact: true })).toBeVisible();
     return form;
   }
@@ -2169,7 +2210,7 @@ export class ComponentsPage extends BasePage {
     ).toBeVisible();
     await deleteButton.click();
 
-    const cannotDeleteHeading = this.page.getByText('Cannot Delete Component', { exact: true });
+    const cannotDeleteHeading = this.page.getByText(/^(?:Cannot Delete Component|Component Deletion Blocked)$/);
     const linkedJobsDialog = this.page.getByRole('dialog').filter({ has: cannotDeleteHeading })
       .filter({ hasText: LINKED_JOBS_MESSAGE }).last();
     // The linked-jobs popup also mentions "delete", so exclude it from the confirmation locator.

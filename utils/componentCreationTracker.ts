@@ -13,6 +13,8 @@ export interface TrackedComponent {
   cleanupStatus?: 'pending' | 'deleted' | 'already_absent' | 'failed';
   cleanupAttemptedAt?: string;
   cleanupResult?: string;
+  generatedWorkOrders?: Array<{ workOrderNumber: string; status: string; jobCode: string; jobTitle: string; createdAt: string }>;
+  cleanupAuthorizedJobs?: Array<{ jobCode: string; jobTitle: string; authorizedAt: string; reason: string }>;
 }
 
 export interface ApprovedRecoveryComponent {
@@ -71,6 +73,19 @@ export async function updateTrackedComponentCleanup(
     component.code === code && component.vessel === vessel
       ? { ...component, cleanupStatus, cleanupAttemptedAt: new Date().toISOString(), cleanupResult }
       : component));
+}
+
+export async function trackComponentWorkOrder(
+  code: string,
+  vessel: string,
+  workOrder: NonNullable<TrackedComponent['generatedWorkOrders']>[number],
+): Promise<void> {
+  await update(async (tracked) => tracked.map((component) => {
+    if (component.code !== code || component.vessel !== vessel) return component;
+    const generatedWorkOrders = (component.generatedWorkOrders ?? [])
+      .filter((item) => item.workOrderNumber !== workOrder.workOrderNumber);
+    return { ...component, generatedWorkOrders: [...generatedWorkOrders, workOrder] };
+  }));
 }
 
 export async function removeTrackedComponent(code: string, vessel: string): Promise<void> {

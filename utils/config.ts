@@ -41,6 +41,17 @@ function required(name: string): string {
   return value;
 }
 
+/** Reads an optional positive whole-number setting, rejecting invalid values instead of guessing. */
+function positiveInteger(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`${name} in .env must be a positive whole number; it is "${raw}".`);
+  }
+  return value;
+}
+
 /**
  * Holds the app URLs and credentials used by the Playwright suite.
  */
@@ -76,5 +87,26 @@ export const config = {
   },
   get componentDepartment(): string {
     return process.env.COMPONENT_DEPARTMENT?.trim() || 'Engine';
+  },
+  /**
+   * RH-P01/RH-P02 vessels, in order: RH_VESSELS (comma-separated) when set,
+   * otherwise VESSEL_NAME, VESSEL_A and VESSEL_B. The spec adds further
+   * vessels from the application's vessel list when fewer than the count.
+   */
+  get runningHoursVessels(): string[] {
+    const listed = process.env.RH_VESSELS?.split(',').map((name) => name.trim()).filter(Boolean);
+    return [...new Set(listed?.length ? listed : [this.vesselName, this.vesselA, this.vesselB])];
+  },
+  /** Number of different vessels RH-P01/RH-P02 test (RH_VESSEL_COUNT, default 3). */
+  get runningHoursVesselCount(): number {
+    return positiveInteger('RH_VESSEL_COUNT', 3);
+  },
+  /** Number of different components RH-P02 compares per vessel (RH_COMPONENTS_PER_VESSEL, default 4). */
+  get runningHoursComponentsPerVessel(): number {
+    return positiveInteger('RH_COMPONENTS_PER_VESSEL', 4);
+  },
+  /** Optional vessel Running Hours is expected to open with (RH_DEFAULT_VESSEL). */
+  get runningHoursDefaultVessel(): string | undefined {
+    return process.env.RH_DEFAULT_VESSEL?.trim() || undefined;
   },
 } as const;
