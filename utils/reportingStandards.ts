@@ -1,5 +1,39 @@
 export type ReportCaseOutcome = "passed" | "failed" | "skipped" | "not-executed";
 
+export type EvidenceComplianceInput = {
+  outcome: ReportCaseOutcome;
+  hasDeclaredExpected: boolean;
+  stepCount: number;
+  stepsMissingExpected: string[];
+  stepsMissingActual: string[];
+  stepsMissingScreenshot: string[];
+  requiresComparison: boolean;
+  comparisonCount: number;
+  hasFinalVerification: boolean;
+  skipReason?: string;
+};
+
+/** Identifies report evidence gaps without inventing application outcomes. */
+export function evaluateEvidenceCompliance(input: EvidenceComplianceInput): string[] {
+  if (input.outcome === "skipped" || input.outcome === "not-executed") {
+    return input.skipReason?.trim() ? [] : ["The skipped or blocked case has no recorded reason."];
+  }
+  const issues: string[] = [];
+  if (!input.hasDeclaredExpected) issues.push("The scenario has no declared business Expected Result.");
+  if (!input.stepCount) issues.push("No chronological business steps were recorded.");
+  if (input.stepsMissingExpected.length)
+    issues.push(`Expected Results are missing for: ${input.stepsMissingExpected.join(", ")}.`);
+  if (input.stepsMissingActual.length)
+    issues.push(`Observed Actual Results are missing for: ${input.stepsMissingActual.join(", ")}.`);
+  if (input.stepsMissingScreenshot.length)
+    issues.push(`Step screenshots are missing for: ${input.stepsMissingScreenshot.join(", ")}.`);
+  if (input.requiresComparison && input.comparisonCount === 0)
+    issues.push("The data-changing or attempted-change scenario has no initial/input/final comparison evidence.");
+  if (input.outcome === "passed" && !input.hasFinalVerification)
+    issues.push("The passed case has no recorded final business verification.");
+  return issues;
+}
+
 /** Distinguishes an intentional skip from a scenario Playwright never ran after setup failed. */
 export function classifyCaseOutcome(
   status: string,
@@ -64,15 +98,13 @@ const EMBEDDED_IMAGE_LOADER = "(()=>{const store=document.getElementById('report
  * and a thumbnail and its full-size link share one copy.
  */
 export function deferEmbeddedImages(html: string): string {
-  const ids = new Map<string, number>();
   const pool: string[] = [];
   const body = html.replace(EMBEDDED_IMAGE, (_match, space: string, attribute: string, uri: string) => {
-    let id = ids.get(uri);
-    if (id === undefined) {
-      id = pool.length;
-      ids.set(uri, id);
-      pool.push(uri);
-    }
+    // Keep references occurrence-scoped. Two separately captured screenshots
+    // can have identical PNG bytes (notably an unchanged post-refresh grid),
+    // but they still belong to different cases/steps and must not share IDs.
+    const id = pool.length;
+    pool.push(uri);
     return attribute.toLowerCase() === "src" ? `${space}data-image="${id}" decoding="async"` : `${space}href="#" data-image-link="${id}"`;
   });
   if (!pool.length) return html;

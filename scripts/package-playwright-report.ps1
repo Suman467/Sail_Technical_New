@@ -42,12 +42,12 @@ function Invoke-ZipFileOperationWithRetry {
     return $false
 }
 
-if (-not (Test-Path -LiteralPath $technicalReportDirectory -PathType Container)) {
-    throw 'The Playwright HTML report directory was not found.'
-}
-
 # Derive eligible custom report names from the specs so stale or timestamped HTML files are excluded.
 $specReportNames = @{}
+$specReportNames['PMS_Running_Hours_Test_Execution_Report.html'] = $true
+$specReportNames['PMS_Running_Hours_Set_Total_Add_Delta_Test_Execution_Report.html'] = $true
+$specReportNames['PMS_Running_Hours_Negative_Test_Execution_Report.html'] = $true
+$specReportNames['PMS_Running_Hours_Negative_Validation_Test_Execution_Report.html'] = $true
 Get-ChildItem -LiteralPath $specificationDirectory -Recurse -File -Filter '*.spec.ts' | ForEach-Object {
     $reportName = $_.Name -replace '\.spec\.ts$', '.html'
     $specReportNames[$reportName] = $true
@@ -75,7 +75,8 @@ try {
             }
     }
 
-    Get-ChildItem -LiteralPath $technicalReportDirectory -Recurse -File | ForEach-Object {
+    if (Test-Path -LiteralPath $technicalReportDirectory -PathType Container) {
+      Get-ChildItem -LiteralPath $technicalReportDirectory -Recurse -File | ForEach-Object {
         $relativePath = $_.FullName.Substring($technicalReportDirectory.Length).TrimStart([char[]]@('\', '/')).Replace('\', '/')
         $entryName = "html/$relativePath"
         [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
@@ -84,6 +85,7 @@ try {
             $entryName,
             [System.IO.Compression.CompressionLevel]::Optimal
         ) | Out-Null
+      }
     }
 }
 finally {

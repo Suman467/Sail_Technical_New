@@ -9,6 +9,23 @@ export const BULK_IMPORT_MAX_UPLOAD_SIZE_MB = 20;
 export const BULK_IMPORT_MAX_UPLOAD_SIZE_BYTES = BULK_IMPORT_MAX_UPLOAD_SIZE_MB * 1024 * 1024;
 export const SPARE_LIMIT = 10
 
+export type SelectionCount = number | 'All';
+
+export const BULK_UPDATE_CONFIG = {
+  vesselCount: 1 as SelectionCount,
+  componentsPerVessel: 5 as SelectionCount,
+  inheritedComponents: 5 as SelectionCount,
+  randomSeed: process.env.RH_RANDOM_SEED,
+};
+
+export const HISTORY_TEST_CONFIG = {
+  vesselCount: 1 as SelectionCount,
+  componentsPerVessel: 2 as SelectionCount,
+  randomSeed: process.env.RH_RANDOM_SEED,
+  exportDownloadTimeoutMs: 120000,
+  verifyAllHistoryPages: true,
+};
+
 /**
  * Components linked-spares run settings (tests/components/components-linked-spares.spec.ts),
  * resolved by utils/componentRunSettings.ts. A PowerShell variable of the same purpose

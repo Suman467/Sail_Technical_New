@@ -1,5 +1,13 @@
 # Project reporting standard
 
+The permanent project-wide specification is `docs/AUTOMATION_EXECUTION_REPORTING_STANDARD.md`. It applies to every existing and future Playwright module. New tests must use the module-neutral helpers in `utils/executionEvidence.ts`; existing compatibility helpers must converge on the same evidence contract.
+
+- Every meaningful executed step requires its own plain-English Expected Result, runtime Actual Result, status, duration, and step-linked screenshot.
+- Every change or attempted change requires an initial/input/final comparison adapted to the module. Bulk comparisons are per record; concurrency comparisons distinguish sessions.
+- A passed Playwright process is not sufficient evidence of a passed business scenario. Final UI or persisted-state verification must be recorded.
+- The shared reporter must identify missing declared expectations, actions, actual results, screenshots, comparisons, or final verification as evidence-compliance gaps without overwriting the observed Playwright/application outcome. A passed business scenario may remain PASS, but it must not be presented as evidence-complete while gaps exist.
+- Skipped, blocked, and not-executed cases record the exact reason and must not show invented actions, values, or screenshots.
+
 These standards apply project-wide to every current and future Playwright validation and audit report, not only Components reports. Shared reporting utilities are the default implementation point; individual specifications must not create competing report formats.
 
 - Every test case must show its ID/name, overall status, scenario-specific Expected and Actual Results, duration, chronological business steps, evidence, and separate Technical Details when diagnostics exist.

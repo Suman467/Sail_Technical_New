@@ -2,9 +2,31 @@ import { expect, test } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { generateStandardAuditReport } from '../../utils/standardAuditReport';
-import { businessFailureActual, classifyCaseOutcome, failureStage, unfinishedStepActual } from '../../utils/reportingStandards';
+import { runningHoursReportIdentity } from '../../utils/SimpleReporter';
+import { businessFailureActual, classifyCaseOutcome, evaluateEvidenceCompliance, failureStage, unfinishedStepActual } from '../../utils/reportingStandards';
 
 test.describe('Shared reporting standards', () => {
+  test('uses the consolidated Running Hours filename for RH-P03 and RH-P04', () => {
+    const identity = runningHoursReportIdentity([
+      'RH-P03 - Set Total',
+      'RH-P04 - Add Delta',
+    ], new Date(2026, 10, 5, 14, 7, 9));
+
+    expect(identity).toEqual({
+      title: 'PMS Running Hours – Set Total, Add Delta & Inherited Hours Validation',
+      fileStem: 'PMS_Running_Hours_Test_Execution_Report',
+    });
+  });
+
+  test('adapts the Running Hours report identity to the scenarios actually supplied', () => {
+    const identity = runningHoursReportIdentity([
+      'RH-P02 - Running Hours values match Components Section C across vessels and components',
+    ], new Date(2026, 10, 5, 14, 7, 9));
+
+    expect(identity.title).toBe('PMS Running Hours – Cross-Module Numeric Running Hours Validation');
+    expect(identity.fileStem).toBe('PMS_Running_Hours_Test_Execution_Report');
+  });
+
   test('classifies PASS, FAIL, SKIPPED, and NOT EXECUTED separately', () => {
     expect(classifyCaseOutcome('passed', 'passed', false)).toBe('passed');
     expect(classifyCaseOutcome('failed', 'passed', false)).toBe('failed');
@@ -37,6 +59,36 @@ test.describe('Shared reporting standards', () => {
     expect(actual).toContain('60 seconds');
     expect(actual).toContain('no result was observed');
     expect(actual).not.toContain('PASS');
+  });
+
+  test('identifies every mandatory evidence gap without changing the underlying case outcome', () => {
+    const issues = evaluateEvidenceCompliance({
+      outcome: 'passed', hasDeclaredExpected: false, stepCount: 1,
+      stepsMissingExpected: ['Save record'], stepsMissingActual: ['Save record'],
+      stepsMissingScreenshot: ['Save record'], requiresComparison: true,
+      comparisonCount: 0, hasFinalVerification: false,
+    });
+    expect(issues).toEqual(expect.arrayContaining([
+      expect.stringContaining('no declared business Expected Result'),
+      expect.stringContaining('Expected Results are missing'),
+      expect.stringContaining('Observed Actual Results are missing'),
+      expect.stringContaining('Step screenshots are missing'),
+      expect.stringContaining('no initial/input/final comparison evidence'),
+      expect.stringContaining('no recorded final business verification'),
+    ]));
+  });
+
+  test('accepts complete evidence and requires an exact reason for skipped cases', () => {
+    expect(evaluateEvidenceCompliance({
+      outcome: 'passed', hasDeclaredExpected: true, stepCount: 2,
+      stepsMissingExpected: [], stepsMissingActual: [], stepsMissingScreenshot: [],
+      requiresComparison: true, comparisonCount: 1, hasFinalVerification: true,
+    })).toEqual([]);
+    expect(evaluateEvidenceCompliance({
+      outcome: 'skipped', hasDeclaredExpected: true, stepCount: 0,
+      stepsMissingExpected: [], stepsMissingActual: [], stepsMissingScreenshot: [],
+      requiresComparison: false, comparisonCount: 0, hasFinalVerification: false,
+    })).toEqual(['The skipped or blocked case has no recorded reason.']);
   });
 
   test('renders consistent audit totals, filters, findings, and technical details', async ({ page }) => {

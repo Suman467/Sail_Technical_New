@@ -9,6 +9,14 @@ export const COMPONENT_SCENARIO_STEP_ANNOTATION = 'components-scenario-step';
 /** Annotation holding the scenario Expected Result declared before execution starts. */
 export const COMPONENT_EXPECTED_RESULT_ANNOTATION = 'components-expected-result';
 export const COMPONENT_FAILURE_SCREENSHOT_PREFIX = 'Failure screenshot :: ';
+export const RUNNING_HOURS_COMPARISON_PREFIX = 'Running Hours Comparison Data :: ';
+
+export type RunningHoursComparisonRow = {
+  field: string;
+  initial: string;
+  entered: string;
+  final: string;
+};
 
 type ValidationStepOptions<T> = {
   /** Builds the Actual Result from the values the validation really observed. */
@@ -22,6 +30,17 @@ type ValidationStepOptions<T> = {
  */
 export function componentScenario(expected: string): { annotation: { type: string; description: string } } {
   return { annotation: { type: COMPONENT_EXPECTED_RESULT_ANNOTATION, description: expected } };
+}
+
+/** Adds the observed before/entered/after values used by Running Hours reports. */
+export async function attachRunningHoursComparison(
+  title: string,
+  rows: RunningHoursComparisonRow[],
+): Promise<void> {
+  await test.info().attach(`${RUNNING_HOURS_COMPARISON_PREFIX}${title}`, {
+    body: JSON.stringify(rows),
+    contentType: 'application/json',
+  });
 }
 
 /**

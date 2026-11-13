@@ -33,7 +33,7 @@ export function primaryComponentsAuthentication(browser: Browser, expired = fals
       const page = await context.newPage();
       const login = new LoginPage(page);
       await login.open();
-      await login.login();
+      await login.loginForPms(config.username, config.password);
       console.log(expired
         ? 'Components authentication: the saved primary session had expired; the primary user logged in again (recovery).'
         : 'Components authentication: primary user logged in once for this worker.');
@@ -58,6 +58,40 @@ export async function openPrimaryComponentsSession(browser: Browser): Promise<Co
   // again only in that observed case; it is reported as an additional login.
   await session.context.close();
   return finishOpening(await openComponentsWithState(browser, await primaryComponentsAuthentication(browser, true)));
+}
+
+/** Opens an isolated authenticated PMS context directly on a requested PMS page without visiting Components. */
+export async function openPrimaryPmsSession(
+  browser: Browser,
+  path = routes.runningHours,
+): Promise<{ context: BrowserContext; page: Page }> {
+  const open = async (expired = false) => {
+    const storageState = await primaryComponentsAuthentication(browser, expired);
+    const context = await browser.newContext({ baseURL: config.baseUrl, viewport: null, storageState });
+    const page = await context.newPage();
+    try {
+      for (let attempt = 1; ; attempt += 1) {
+        try {
+          await page.goto(path, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+          break;
+        } catch (error) {
+          if (attempt < 2) continue;
+          throw error;
+        }
+      }
+      return { context, page };
+    } catch (error) {
+      await context.close();
+      throw error;
+    }
+  };
+  let session = await open();
+  const denied = /\/login(?:\/|$)/i.test(new URL(session.page.url()).pathname)
+    || await session.page.getByRole('heading', { name: 'Access Denied', exact: true }).isVisible().catch(() => false);
+  if (!denied) return session;
+  await session.context.close();
+  session = await open(true);
+  return session;
 }
 
 async function landedOnLoginOrAccessDenied(page: Page): Promise<boolean> {

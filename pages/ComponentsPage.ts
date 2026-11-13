@@ -882,6 +882,7 @@ export class ComponentsPage extends BasePage {
     );
   }
 
+
   /** Reads the three vessel-scope identity fields from the selected component details panel. */
   public async readSelectedComponentIdentity(): Promise<SelectedComponentIdentity> {
     const section = 'A. Component Information';

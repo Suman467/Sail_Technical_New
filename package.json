@@ -13,6 +13,8 @@
     "report:package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-playwright-report.ps1",
     "report:improve-existing": "node scripts/improve-existing-report-descriptions.cjs",
     "test:reporting": "node ./scripts/run-playwright.cjs tests/reporting --reporter=line --workers=1",
+    "audit:reporting": "node ./scripts/audit-reporting-compliance.cjs",
+    "audit:reporting:strict": "node ./scripts/audit-reporting-compliance.cjs --strict",
     "typecheck": "tsc --noEmit",
     "lint": "node ./node_modules/eslint/bin/eslint.js ."
   },

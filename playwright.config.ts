@@ -18,6 +18,9 @@ const explicitlyTargetedSpecs = process.argv
 const cleanupSpecExplicitlyTargeted = explicitlyTargetedSpecs.length === 1
   && (explicitlyTargetedSpecs[0] === "tests/components/clean.spec.ts"
     || explicitlyTargetedSpecs[0].endsWith("/tests/components/clean.spec.ts"));
+const runningHoursWorkflow = explicitlyTargetedSpecs.length > 0
+  && explicitlyTargetedSpecs.every((spec) =>
+    spec === "tests/running-hours" || spec.includes("tests/running-hours/"));
 
 // Playwright evaluates this configuration before creating its workers, so an
 // exact direct CLI target can authorize cleanup without making normal suite
@@ -49,13 +52,13 @@ export default defineConfig({
 
   // Reporters
   reporter: [
-    [
+    ...(!runningHoursWorkflow ? [[
       "html",
       {
         open: "never",
         outputFolder: "reports/validation/playwright-html",
       },
-    ],
+    ] as const] : []),
     ["./utils/SimpleReporter.ts"],
   ],
 

@@ -16,9 +16,11 @@ import {
   COMPONENT_SCENARIO_STEP_ANNOTATION,
   COMPONENT_STEP_ACTUAL_PREFIX,
   COMPONENT_VALIDATION_SCREENSHOT_PREFIX,
+  RUNNING_HOURS_COMPARISON_PREFIX,
+  type RunningHoursComparisonRow,
 } from "./componentValidationEvidence";
 import { generateStandardAuditReport, reportModuleFolder, type AuditScenarioExecution } from "./standardAuditReport";
-import { businessFailureActual, classifyCaseOutcome, deferEmbeddedImages, failureStage, overallExecutionStatus, unfinishedStepActual } from "./reportingStandards";
+import { businessFailureActual, classifyCaseOutcome, deferEmbeddedImages, evaluateEvidenceCompliance, failureStage, overallExecutionStatus, unfinishedStepActual, type ReportCaseOutcome } from "./reportingStandards";
 
 /** Where a business step ran: shared suite setup, per-test setup, the test body, or after-test restore. */
 type StepPhase = "suite-setup" | "test-setup" | "test" | "teardown";
@@ -82,6 +84,7 @@ type ResultRow = {
   evidence: ReportAttachment[];
   attachments: ReportAttachment[];
   comparisons: FieldComparison[];
+  runningHoursComparisons: { title: string; rows: RunningHoursComparisonRow[] }[];
   validationSections: {
     title: string;
     details: string;
@@ -215,7 +218,8 @@ export default class SimpleReporter implements Reporter {
           attachment.name.startsWith("Validation Errors - ") ||
           attachment.name.startsWith("Validation Error Rows - ") ||
           attachment.name.startsWith("Bulk Import File Attempt - ") ||
-          attachment.name.startsWith(COMPONENT_STEP_ACTUAL_PREFIX)
+          attachment.name.startsWith(COMPONENT_STEP_ACTUAL_PREFIX) ||
+          attachment.name.startsWith(RUNNING_HOURS_COMPARISON_PREFIX)
         )
           return [];
         if (
@@ -244,6 +248,17 @@ export default class SimpleReporter implements Reporter {
             return body
               ? (JSON.parse(body.toString()) as FieldComparison[])
               : [];
+          } catch {
+            return [];
+          }
+        }),
+      runningHoursComparisons: result.attachments
+        .filter((attachment) => attachment.name.startsWith(RUNNING_HOURS_COMPARISON_PREFIX))
+        .flatMap((attachment) => {
+          try {
+            const body = bodyFor(attachment);
+            const rows = JSON.parse(body?.toString() ?? '[]') as RunningHoursComparisonRow[];
+            return [{ title: attachment.name.slice(RUNNING_HOURS_COMPARISON_PREFIX.length), rows }];
           } catch {
             return [];
           }
@@ -298,16 +313,35 @@ export default class SimpleReporter implements Reporter {
     void result;
     const runRows = [...this.rows.values()];
     const rowsBySpec = new Map<string, ResultRow[]>();
-    for (const row of runRows)
-      rowsBySpec.set(row.specName, [
-        ...(rowsBySpec.get(row.specName) ?? []),
+    for (const row of runRows) {
+      // One in-memory group per current invocation prevents prior results from
+      // leaking in while consolidating every selected Running Hours spec.
+      const reportName = row.moduleFolder === "running-hours"
+        ? row.specName === "pms-running-hours-history-export-validation"
+          ? "pms-running-hours-history-export-validation"
+          : row.specName === "pms-running-hours-bulk-update"
+          ? "pms-running-hours-bulk-update"
+          : row.specName === "pms-running-hours-concurrency-error-handling"
+          ? "pms-running-hours-concurrency-error-handling"
+          : row.specName === "pms-running-hours-validation-override-same-day-negative"
+          ? "pms-running-hours-validation-override-same-day-negative"
+          : row.specName === "pms-running-hours-negative-validation" || dedicatedRunningHoursNegativeRun()
+          ? "pms-running-hours-negative-validation"
+          : dedicatedRunningHoursUpdateRun()
+          ? "pms-running-hours-set-total-add-delta-validation"
+          : "pms-running-hours-positive-validation"
+        : row.specName;
+      rowsBySpec.set(reportName, [
+        ...(rowsBySpec.get(reportName) ?? []),
         row,
       ]);
+    }
     const validationDirectory = path.resolve("reports", "validation");
     for (const [specName, specRows] of rowsBySpec) {
       const moduleFolder = specRows[0]?.moduleFolder ?? reportModuleFolder(specName);
       const moduleDirectory = path.resolve(validationDirectory, moduleFolder);
-      const reportPath = path.resolve(moduleDirectory, `${specName}.html`);
+      const reportIdentity = validationReportIdentity(specName, specRows, this.startedAt);
+      const reportPath = path.resolve(moduleDirectory, `${reportIdentity.fileStem}.html`);
       if (path.dirname(reportPath) !== moduleDirectory) {
         throw new Error(
           `Validation report resolved outside reports/validation: ${reportPath}`,
@@ -316,10 +350,13 @@ export default class SimpleReporter implements Reporter {
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(
         reportPath,
-        deferEmbeddedImages(renderValidationReport(specName, specRows, this.startedAt)),
+        deferEmbeddedImages(renderValidationReport(specName, specRows, this.startedAt, reportIdentity.title)),
         "utf8",
       );
-      ensureAuditReport(specName, specRows, this.startedAt);
+      // Running Hours has one requested HTML artifact. Other modules retain
+      // their separate audit report behavior.
+      if (moduleFolder !== "running-hours")
+        ensureAuditReport(specName, specRows, this.startedAt);
     }
 
     const packageScript = path.resolve(
@@ -357,6 +394,106 @@ function getSpecReportName(specFile: string): string {
     : path.parse(fileName).name;
 }
 
+function validationReportIdentity(
+  specName: string,
+  rows: ResultRow[],
+  startedAt: Date,
+): { fileStem: string; title?: string } {
+  if (specName === "pms-running-hours-negative-validation") {
+    return {
+      fileStem: "PMS_Running_Hours_Negative_Validation_Test_Execution_Report",
+      title: "PMS Running Hours – Negative Input, Date, Rate Limit & Override Validation Report",
+    };
+  }
+  if (specName === "pms-running-hours-validation-override-same-day-negative") {
+    return {
+      fileStem: "PMS_Running_Hours_Validation_Override_Same_Day_Negative_Test_Execution_Report",
+      title: "PMS Running Hours – Validation Override & Same-Day Negative Test Execution Report",
+    };
+  }
+  if (specName === "pms-running-hours-bulk-update") {
+    return {
+      fileStem: "PMS_Running_Hours_Bulk_Update_Test_Execution_Report",
+      title: "PMS Running Hours – Bulk Update Positive & Negative Validation Test Execution Report",
+    };
+  }
+  if (specName === "pms-running-hours-concurrency-error-handling") {
+    return {
+      fileStem: "PMS_Running_Hours_Concurrency_Error_Handling_Negative_Validation_Test_Execution_Report",
+      title: "PMS Running Hours – Concurrency & Error Handling Negative Validation Test Execution Report",
+    };
+  }
+  if (specName === "pms-running-hours-set-total-add-delta-validation") {
+    return {
+      fileStem: "PMS_Running_Hours_Set_Total_Add_Delta_Test_Execution_Report",
+      title: "PMS Running Hours – Set Total & Add Delta Test Execution Report",
+    };
+  }
+  if (specName === "pms-running-hours-positive-validation") {
+    return {
+      fileStem: "PMS_Running_Hours_Positive_Updates_Rate_Limit_Validation_Test_Execution_Report",
+      title: "PMS Running Hours – Positive Updates & Rate Limit Validation Test Execution Report",
+    };
+  }
+  if (specName === "pms-running-hours-history-export-validation") {
+    return {
+      fileStem: "PMS_Running_Hours_History_Persistence_Export_Validation_Test_Execution_Report",
+      title: "PMS Running Hours – History, Persistence & Export Validation Test Execution Report",
+    };
+  }
+  if (specName !== "pms-running-hours-validation") return { fileStem: specName };
+
+  return runningHoursReportIdentity(rows.map((row) => row.title), startedAt);
+}
+
+function dedicatedRunningHoursUpdateRun(): boolean {
+  return process.argv
+    .map((argument) => argument.replaceAll("\\", "/").replace(/^\.\//, ""))
+    .some((argument) => argument === "tests/running-hours/pms-running-hours-set-total-add-delta-validation.spec.ts"
+      || argument.endsWith("/tests/running-hours/pms-running-hours-set-total-add-delta-validation.spec.ts"));
+}
+
+function dedicatedRunningHoursNegativeRun(): boolean {
+  return process.argv
+    .map((argument) => argument.replaceAll("\\", "/").replace(/^\.\//, ""))
+    .some((argument) => argument === "tests/running-hours/pms-running-hours-negative-validation.spec.ts"
+      || argument.endsWith("/tests/running-hours/pms-running-hours-negative-validation.spec.ts"));
+}
+
+export function runningHoursReportIdentity(
+  testTitles: string[],
+  _startedAt: Date,
+): { fileStem: string; title: string } {
+  void _startedAt;
+  const scenarios = [...new Map(testTitles.flatMap((testTitle) => {
+    const id = testTitle.match(/\bRH-P\d+\b/i)?.[0].toUpperCase();
+    if (!id) return [];
+    const name = testTitle.replace(/^.*?\bRH-P\d+\b\s*[-–—:]?\s*/i, "").trim();
+    return [[id, name] as const];
+  })).entries()].map(([id, name]) => ({ id, name }));
+  const scenarioKey = scenarios.map(({ id }) => id).sort().join("+");
+
+  if (scenarioKey === "RH-P03+RH-P04") {
+    return {
+      fileStem: "PMS_Running_Hours_Test_Execution_Report",
+      title: "PMS Running Hours – Set Total, Add Delta & Inherited Hours Validation",
+    };
+  }
+
+  const conciseScenarioNames: Record<string, string> = {
+    "RH-P01": "Vessel Loading & Component Search",
+    "RH-P02": "Cross-Module Numeric Running Hours",
+    "RH-P03": "Set Total & Inherited Hours",
+    "RH-P04": "Add Delta & Inherited Hours",
+  };
+  const scenarioNames = scenarios.map(({ name, id }) => conciseScenarioNames[id] ?? name ?? id);
+  const subject = scenarioNames.length ? scenarioNames.join(" & ") : "Execution";
+  return {
+    fileStem: "PMS_Running_Hours_Test_Execution_Report",
+    title: `PMS Running Hours – ${subject} Validation`,
+  };
+}
+
 function formatDuration(milliseconds: number): string {
   const seconds = milliseconds / 1000;
   if (seconds < 60) return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)} s`;
@@ -368,7 +505,7 @@ function renderSpecReportBase(
   rows: ResultRow[],
   startedAt: Date,
 ): string {
-  const outcomes = rows.map((row) => classifyCaseOutcome(row.status, row.expectedStatus, row.annotations.some(Boolean), row.annotations.at(-1)));
+  const outcomes = rows.map(reportCaseOutcome);
   const passed = outcomes.filter((status) => status === "passed").length;
   const failed = outcomes.filter((status) => status === "failed").length;
   const skipped = outcomes.filter((status) => status === "skipped").length;
@@ -406,7 +543,7 @@ function renderSpecReport(
   rows: ResultRow[],
   startedAt: Date,
 ): string {
-  const outcomes = rows.map((row) => classifyCaseOutcome(row.status, row.expectedStatus, row.annotations.some(Boolean), row.annotations.at(-1)));
+  const outcomes = rows.map(reportCaseOutcome);
   const total = outcomes.length;
   const passed = outcomes.filter((status) => status === "passed").length;
   const failed = outcomes.filter((status) => status === "failed").length;
@@ -442,6 +579,7 @@ function renderValidationReport(
   specName: string,
   rows: ResultRow[],
   startedAt: Date,
+  reportTitle?: string,
 ): string {
   const fileAttempts = rows.flatMap((row) => row.uploadedFiles);
   const moduleName =
@@ -474,15 +612,16 @@ function renderValidationReport(
   const uploadedFileInformation = uploadedFiles.length
     ? `<br><strong>Uploaded File:</strong> ${uploadedFiles.map(escapeHtml).join(", ")}`
     : "";
+  const title = reportTitle ?? `${moduleName.toUpperCase()} VALIDATION REPORT`;
   const executionInformation = `<h2>Execution Information</h2><p><strong>Module:</strong> ${escapeHtml(moduleName)}<br><strong>Validation Type:</strong> ${validationType}<br><strong>${vesselLabel}:</strong> ${escapeHtml(vessels)}<br><strong>Import Mode:</strong> ${escapeHtml(importMode)}${uploadedFileInformation}<br><strong>Logged-in User${users.length === 1 ? "" : "s"}:</strong> ${escapeHtml(users.join(", "))}<br><strong>Execution Date:</strong> ${escapeHtml(startedAt.toLocaleString())}<br><strong>Overall Status:</strong> ${overallStatus}</p>`;
   return renderSpecReport(specName, rows, startedAt)
     .replace(
       `<title>${escapeHtml(specName)} Execution Report</title>`,
-      `<title>${escapeHtml(moduleName.toUpperCase())} VALIDATION REPORT</title>`,
+      `<title>${escapeHtml(title)}</title>`,
     )
     .replace(
       `<h1>${escapeHtml(specName)} —`,
-      `<h1>${escapeHtml(moduleName.toUpperCase())} VALIDATION REPORT —`,
+      `<h1>${escapeHtml(title)} —`,
     )
     .replace(
       `<p>${startedAt.toLocaleString()} | ${escapeHtml(config.baseUrl)}</p>`,
@@ -509,7 +648,7 @@ function getBusinessStepTitles(steps: TestStep[]): string[] {
 function expectedForStep(name: string): string {
   const cleanName = name.replace(/[.]+$/, "");
   if (/^login page is open$/i.test(cleanName))
-    return "The application should display the login page so the configured user can authenticate.";
+    return "The login page should open successfully.";
   if (/^audit dashboard page is open$/i.test(cleanName))
     return "After authentication, the application should display the Audit Dashboard.";
   if (/^components page is open$/i.test(cleanName))
@@ -1090,14 +1229,14 @@ function buildComponentsReport(rows: ResultRow[]): ComponentsReport {
       steps.push(step);
     }
 
-    const merged = mergeConsecutiveRepeats(steps, row);
+    const merged = mergeConsecutiveRepeats(steps, row).map((step) => rhN20Step(step, row));
     merged.forEach((step, index) => {
       step.number = String(index + 1);
     });
     const scenarioStep = row.scenarioTimeline
       .map((step) => parseTimelineStep(step, row))
       .at(-1);
-    return { steps: merged, scenario: componentsScenario(row, merged, scenarioStep) };
+    return { steps: merged, scenario: rhN20Scenario(row, componentsScenario(row, merged, scenarioStep)) };
   });
   const mergedSetup = mergeConsecutiveRepeats(commonSetup);
   mergedSetup.forEach((step, index) => {
@@ -1166,7 +1305,7 @@ function componentsScenario(
         : groupSetupFailed
         ? "NOT EXECUTED — this scenario did not run because the shared setup for this test group failed in an earlier test case (see the first failed test case above). No application behavior was exercised."
         : reason
-          ? `NOT EXECUTED — the scenario was skipped: ${reason}`
+          ? `NOT EXECUTED — the scenario was skipped: ${reason}${/^RH-N24\b/i.test(row.title) ? ' Application actions performed: none. Screenshots captured: none.' : ''}`
           : "NOT EXECUTED — the scenario was skipped; no application result was observed.",
       technical,
     };
@@ -1202,12 +1341,145 @@ function componentsScenario(
   };
 }
 
+type RhN20ComponentResult = {
+  code: string;
+  type: string;
+  oldRh: string;
+  enteredRh: string;
+  validation: string;
+  finalRh: string;
+  status: string;
+};
+
+function rhN20Evidence(row: ResultRow): string {
+  return Object.values(row.stepActuals).filter((value) => /Row \| Vessel \| Component \| Type \| Old RH/i.test(value)).at(-1) ?? "";
+}
+
+function parseRhN20Components(row: ResultRow): RhN20ComponentResult[] {
+  const evidence = rhN20Evidence(row);
+  const results: RhN20ComponentResult[] = [];
+  const pattern = /(?:^|\s\/\s)\d+\s*\|\s*[^|]+\|\s*.*?\(([^()]+)\)\s*\|\s*(Standalone|Inherited-linked)\s*\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|\s*(.*?)(?=\s\/\s\d+\s*\||$)/gi;
+  for (const match of evidence.matchAll(pattern)) {
+    const persisted = match[6].trim();
+    const finalRh = persisted.match(/MASTER\s+[^â†’→]*[â†’→]+\s*([^;]+)/i)?.[1]?.trim() ?? "Not verified";
+    const verified = /;\s*verified\s*$/i.test(persisted);
+    const invalid = /cannot be negative|cannot be less than/i.test(match[5]);
+    results.push({
+      code: match[1].trim(),
+      type: match[2].trim(),
+      oldRh: match[3].trim(),
+      enteredRh: match[4].trim(),
+      validation: match[5].trim(),
+      finalRh,
+      status: verified ? (invalid ? "Rejected — unchanged" : "Updated — verified") : persisted || "Not verified",
+    });
+  }
+  return results;
+}
+
+function rhN20Counts(row: ResultRow) {
+  const evidence = rhN20Evidence(row);
+  const number = (pattern: RegExp) => Number(evidence.match(pattern)?.[1] ?? 0);
+  return {
+    vessel: evidence.match(/Vessel:\s*([^;]+)/i)?.[1]?.trim() ?? "Not recorded",
+    selected: number(/selected:\s*(\d+)/i),
+    submitted: number(/submitted together:\s*(\d+)/i),
+    saved: number(/(?:observed valid rows persisted|saved):\s*(\d+)(?:\/\d+)?/i),
+    rejected: number(/(?:observed invalid rows unchanged|rejected):\s*(\d+)(?:\/\d+)?/i),
+    saves: number(/Bulk Save actions:\s*(\d+)/i),
+  };
+}
+
+function rhN20Scenario(row: ResultRow, fallback: ComponentsScenario): ComponentsScenario {
+  if (!/^RH-N20\b/i.test(row.title)) return fallback;
+  const counts = rhN20Counts(row);
+  const valid = counts.submitted;
+  const invalid = Math.max(counts.selected - valid, counts.rejected);
+  const expected = `The system should reject the ${invalid} invalid Running Hours ${invalid === 1 ? "entry" : "entries"} and save only the ${valid} valid ${valid === 1 ? "entry" : "entries"}. After refreshing, all ${valid} valid components should show their updated Running Hours, while the ${invalid} invalid components remain unchanged. No incorrect updates or duplicate history entries should be created.`;
+  if (row.status !== "passed") return { ...fallback, expected };
+  const actual = `Bulk Running Hours update completed successfully for ${counts.vessel}. ${counts.saved} valid ${counts.saved === 1 ? "component was" : "components were"} updated using ${counts.saves} Bulk Save action${counts.saves === 1 ? "" : "s"}. ${counts.rejected} invalid ${counts.rejected === 1 ? "component was" : "components were"} excluded from submission and remained unchanged. The saved values were verified after refresh. Final execution status: PASS.`;
+  return { expected, actual, technical: fallback.technical };
+}
+
+function rhN20Step(step: ComponentsReportStep, row: ResultRow): ComponentsReportStep {
+  if (!/^RH-N20\b/i.test(row.title)) return step;
+  if (/selected vessel and randomized component list/i.test(step.title))
+    return { ...step, expected: "The required valid and invalid components should be selected from the same vessel." };
+  if (/mixed valid and invalid values/i.test(step.title))
+    return { ...step, expected: "Invalid entries should display validation errors, while valid entries should be accepted." };
+  if (/multiple valid rows ready/i.test(step.title))
+    return { ...step, expected: "Invalid entries should be excluded from submission, and valid entries should remain ready to save." };
+  if (/save all valid rows together/i.test(step.title)) {
+    const counts = rhN20Counts(row);
+    return {
+      ...step,
+      expected: "All valid entries should be saved together using one Bulk Save action.",
+      actual: `One Bulk Save submitted ${counts.submitted} valid components. The application completed the operation and the detailed request diagnostics are available under Technical Details / Debug Information.`,
+    };
+  }
+  if (/classify the Save outcome and verify all selected components/i.test(step.title))
+    return { ...step, expected: "Valid component values should be updated, while invalid component values and history remain unchanged." };
+  return step;
+}
+
+function renderRhN20ComponentTable(row: ResultRow): string {
+  if (!/^RH-N20\b/i.test(row.title)) return "";
+  const components = parseRhN20Components(row);
+  if (!components.length) return "";
+  const rows = components.map((item) => `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.type)}</td><td>${escapeHtml(item.oldRh)}</td><td>${escapeHtml(item.enteredRh)}</td><td>${escapeHtml(item.validation)}</td><td>${escapeHtml(item.finalRh)}</td><td class="${/verified|unchanged/i.test(item.status) ? "pass" : "fail"}">${escapeHtml(item.status)}</td></tr>`).join("");
+  return `<section class="component-results"><h3>Component Results</h3><div class="table-scroll"><table><thead><tr><th>Component Code</th><th>Component Type</th><th>Old RH</th><th>Entered RH</th><th>Validation</th><th>Final RH</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+}
+
+function renderRhN20DebugInformation(row: ResultRow): string {
+  if (!/^RH-N20\b/i.test(row.title)) return "";
+  const diagnostic = Object.entries(row.stepActuals)
+    .find(([name]) => /save all valid rows together and monitor/i.test(name))?.[1];
+  if (!diagnostic) return "";
+  return `<details class="technical"><summary>Technical Details / Debug Information</summary><pre>${escapeHtml(diagnostic)}</pre></details>`;
+}
+
 /** Vessels actually used at runtime, in the order they appear in the recorded steps. */
 function runtimeVessels(rows: ResultRow[]): string[] {
   const text = rows.flatMap((row) => [...row.timeline.map((step) => step.title), ...row.steps]).join("\n");
   const found = new Set<string>();
   for (const match of text.matchAll(/Vessel ([A-Z0-9_][\w-]*)/g)) found.add(match[1]);
   return [...found].filter((vessel) => /\d|_/.test(vessel));
+}
+
+function evidenceComplianceIssues(row: ResultRow): string[] {
+  const outcome = classifyCaseOutcome(row.status, row.expectedStatus, row.annotations.some(Boolean), row.annotations.at(-1));
+  const steps = row.steps.map((title, index) => parseBusinessStep(title, index, row));
+  const executedSteps = steps.filter((step) => !/^(?:not run|not executed|skipped)$/i.test(step.status));
+  const screenshotTitles = new Set(row.componentStepScreenshots.map((item) => item.stepTitle));
+  const missingScreenshot = executedSteps
+    .filter((step) => !screenshotTitles.has(step.title))
+    .map((step) => step.title);
+  const missingExpected = executedSteps
+    .filter((step) => !step.expected.trim() || /should return the application data required by the scenario/i.test(step.expected))
+    .map((step) => step.title);
+  const missingActual = executedSteps
+    .filter((step) => !step.actual.trim() || /no business result was recorded|completed; no business step was recorded/i.test(step.actual))
+    .map((step) => step.title);
+  const mutationText = [row.title, ...row.steps].join(' ');
+  const requiresComparison = /\b(?:save|update|edit|create|delete|import|upload|bulk|cancel|concurr|set total|add delta)\b/i.test(mutationText);
+  const hasFinalVerification = row.scenarioSteps.length > 0
+    || steps.some((step) => /\b(?:verify|verification|persist|unchanged|history|final result|compare)\b/i.test(step.title));
+  return evaluateEvidenceCompliance({
+    outcome,
+    hasDeclaredExpected: Boolean(row.declaredExpected?.trim()),
+    stepCount: executedSteps.length,
+    stepsMissingExpected: missingExpected,
+    stepsMissingActual: missingActual,
+    stepsMissingScreenshot: missingScreenshot,
+    requiresComparison,
+    comparisonCount: row.comparisons.length + row.runningHoursComparisons.length,
+    hasFinalVerification,
+    skipReason: row.annotations.at(-1),
+  });
+}
+
+function reportCaseOutcome(row: ResultRow): ReportCaseOutcome {
+  return classifyCaseOutcome(row.status, row.expectedStatus, row.annotations.some(Boolean), row.annotations.at(-1));
 }
 
 function renderResultRow(
@@ -1253,6 +1525,8 @@ function renderResultRow(
   parsedSteps.forEach((step, index) => {
     step.number = String(index + 1);
   });
+  const originalCaseOutcome = classifyCaseOutcome(row.status, row.expectedStatus, row.annotations.some(Boolean), row.annotations.at(-1));
+  const complianceIssues = evidenceComplianceIssues(row);
   const validationSummary = readValidationSummary(
     parsedSteps.map((step) => step.actual).join("\n"),
   );
@@ -1370,11 +1644,16 @@ function renderResultRow(
   const comparisonTable = comparisonRows
     ? `<section><h3>Validation Details</h3><table><thead><tr><th>Record Code</th><th>Record Name</th><th>Field</th><th>Expected (Excel)</th><th>Actual (UI)</th><th>Status</th></tr></thead><tbody>${comparisonRows}</tbody></table></section>`
     : "";
+  const runningHoursComparisonTable = row.runningHoursComparisons.map((comparison) => {
+    const rows = comparison.rows.map((item) => `<tr><td>${escapeHtml(item.field)}</td><td>${escapeHtml(item.initial)}</td><td>${escapeHtml(item.entered)}</td><td>${escapeHtml(item.final)}</td></tr>`).join("");
+    return `<section class="running-hours-comparison"><h3>${escapeHtml(comparison.title)}</h3><div class="table-scroll"><table><thead><tr><th>Field</th><th>Initial Value</th><th>Entered Value</th><th>Final Value</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+  }).join("");
   const attention = row.comparisons.filter((item) => item.status !== "PASS");
   const attentionSection = attention.length
     ? `<section><h3>Records Requiring Attention</h3>${attention.map((item) => `<p><strong>${escapeHtml(item.recordCode)}</strong>${item.recordName ? ` — ${escapeHtml(item.recordName)}` : ""}<br>Failed Field: ${escapeHtml(item.field)}<br>Expected: ${escapeHtml(item.expected)}<br>Actual: ${escapeHtml(item.actual)}<br>Reason: ${escapeHtml(item.reason ?? "The expected and actual values did not match.")}<br>Status: ${item.status}</p>`).join("")}</section>`
     : "";
-  const scenario = componentsCase?.scenario ?? scenarioDescription(row, parsedSteps);
+  const baseScenario = componentsCase?.scenario ?? scenarioDescription(row, parsedSteps);
+  const scenario = baseScenario;
   const technical = scenario.technical && !componentsCase
     ? `<details class="technical"><summary>Technical Details</summary><pre>${escapeHtml(scenario.technical)}</pre></details>`
     : "";
@@ -1382,11 +1661,13 @@ function renderResultRow(
   const componentsTechnical = scenario.technical && componentsCase
     ? `<details class="technical"><summary>Technical Details</summary><pre>${escapeHtml(scenario.technical)}</pre></details>`
     : "";
-  const caseOutcome = classifyCaseOutcome(row.status, row.expectedStatus, row.annotations.some(Boolean), row.annotations.at(-1));
+  const rhN20ComponentTable = renderRhN20ComponentTable(row);
+  const rhN20Debug = renderRhN20DebugInformation(row);
+  const caseOutcome = originalCaseOutcome;
   const resultLabel = caseOutcome === "not-executed" ? "NOT EXECUTED" : caseOutcome.toUpperCase();
   const testId = row.title.match(TEST_CASE_ID)?.[0] ?? `Test ${index + 1}`;
   const scenarioName = row.title.replace(new RegExp(`^\\s*${testId}\\s*[-:â€”–]?\\s*`, "i"), "") || row.title;
-  return `<details class="test-case" data-status="${caseOutcome}"><summary><span class="case-header"><span class="case-title"><span class="case-id">${escapeHtml(testId)}</span>${escapeHtml(scenarioName)}</span><span class="status ${caseOutcome}">${resultLabel}</span><span class="duration">${formatDuration(row.duration)}</span><span class="chevron" aria-hidden="true"></span></span></summary><div class="case-body"><p class="tags">${escapeHtml(row.tags.join(", "))}</p><div class="result-grid"><section class="result-box"><h3>Expected Result</h3><p>${escapeHtml(scenario.expected)}</p></section><section class="result-box"><h3>Actual Result</h3><p>${escapeHtml(scenario.actual).replace(/\r?\n/g, "<br>")}</p></section></div><div class="table-scroll"><table class="business-steps"><thead><tr><th>Step</th><th>Execution Step</th><th>Expected Result</th><th>Actual Result</th><th>Status</th></tr></thead><tbody>${steps}</tbody></table></div>${componentsTechnical}${technical}${comparisonTable}${validation}${history}${details}${attentionSection}${evidenceSection}</div></details>`;
+  return `<details class="test-case" data-status="${caseOutcome}"><summary><span class="case-header"><span class="case-title"><span class="case-id">${escapeHtml(testId)}</span>${escapeHtml(scenarioName)}</span><span class="status ${caseOutcome}">${resultLabel}</span><span class="duration">${formatDuration(row.duration)}</span><span class="chevron" aria-hidden="true"></span></span></summary><div class="case-body"><p class="tags">${escapeHtml(row.tags.join(", "))}</p><div class="result-grid"><section class="result-box"><h3>Expected Result</h3><p>${escapeHtml(scenario.expected)}</p></section><section class="result-box"><h3>Actual Result</h3><p>${escapeHtml(scenario.actual).replace(/\r?\n/g, "<br>")}</p></section></div>${rhN20ComponentTable}${runningHoursComparisonTable}<div class="table-scroll"><table class="business-steps"><thead><tr><th>Step</th><th>Execution Step</th><th>Expected Result</th><th>Actual Result</th><th>Status</th></tr></thead><tbody>${steps}</tbody></table></div>${rhN20Debug}${componentsTechnical}${technical}${comparisonTable}${validation}${history}${details}${attentionSection}${evidenceSection}</div></details>`;
 }
 
 function screenshotFileName(stepTitle: string): string {
